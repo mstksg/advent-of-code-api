@@ -1,0 +1,61 @@
+name:                advent-of-code-api
+version:             0.1.0.0
+github:              "mstksg/advent-of-code-api"
+license:             BSD3
+author:              "Justin Le"
+maintainer:          "justin@jle.im"
+copyright:           "(c) Justin Le 2018"
+
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+# Metadata used when publishing your package
+synopsis:            Advent of Code REST API bindings
+category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description: |
+    Haskell bindings for Advent of Code REST API.  Please use responsibly!
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Werror=incomplete-patterns
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+  dependencies:
+  - finite-typelits
+  - containers
+  - text
+  - curl
+  - mtl
+  - taggy
+
+# executables:
+#   advent-of-code-api-exe:
+#     main:                Main.hs
+#     source-dirs:         app
+#     ghc-options:
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - advent-of-code-api
+
+# tests:
+#   advent-of-code-api-test:
+#     main:                Spec.hs
+#     source-dirs:         test
+#     ghc-options:
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - advent-of-code-api
