@@ -37,6 +37,9 @@ library:
   - curl
   - mtl
   - taggy
+  - directory
+  - filepath
+  - binary
 
 # executables:
 #   advent-of-code-api-exe:
