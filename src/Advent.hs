@@ -9,6 +9,23 @@
 {-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE TypeInType         #-}
 
+-- |
+-- Module      : Advent
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- Haskell bindings for Advent of Code 2018 REST API.
+--
+-- Specify your requests with 'AoC' and 'AoCSettings', and run them with
+-- 'runAoC'.
+--
+-- Please use responsibly.  All actions are rate-limited to a minimum of
+-- one request per minute.
+
 module Advent (
   -- * API
     AoC(..)
@@ -55,7 +72,7 @@ import qualified System.IO.Unsafe     as Unsafe
 import qualified Text.Taggy           as H
 
 initialThrottleLimit :: Int
-initialThrottleLimit = 1000
+initialThrottleLimit = 300
 
 aocThrottler :: Throttler
 aocThrottler = Unsafe.unsafePerformIO $ newThrottler initialThrottleLimit
@@ -216,7 +233,7 @@ runAoC AoCSettings{..} a = do
       
       (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<) 
                . liftIO
-               . throttling aocThrottler _aThrottle
+               . throttling aocThrottler (max 1000000 _aThrottle)
                $ curlGetString u (apiCurl _aSessionKey a)
       case cc of
         CurlOK -> return ()
