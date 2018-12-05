@@ -20,8 +20,8 @@
 --   Example:
 --   
 --   <pre>
---   -- fetch prompt for day 5, part 2
---   <a>runAoC</a> myOpts $ <a>AoCPrompt</a> (<a>mkDay_</a> 5) <a>Part2</a>
+--   -- fetch prompts for day 5
+--   <a>runAoC</a> myOpts $ <a>AoCPrompt</a> (<a>mkDay_</a> 5)
 --   
 --   -- fetch input for day 8
 --   <a>runAoC</a> myOpts $ <a>AoCInput</a> (<a>mkDay_</a> 8)
@@ -46,13 +46,17 @@ module Advent
 --   <a>mkDay_</a>.
 data AoC :: Type -> Type
 
--- | Fetch prompts, as HTML.
-[AoCPrompt] :: Finite 25 -> Part -> AoC Text
+-- | Fetch prompts for a given day. Returns a <a>Map</a> of <a>Part</a>s
+--   and their associated promps, as HTML.
+[AoCPrompt] :: Finite 25 -> AoC (Map Part Text)
 
--- | Fetch input
+-- | Fetch input, as plaintext. Returned verbatim. Be aware that input
+--   might contain trailing newlines.
 [AoCInput] :: Finite 25 -> AoC Text
 
--- | Submit answer.
+-- | Submit a plaintext answer (the <a>String</a>) to a given day and part.
+--   Receive a server reponse (as HTML) and a response code
+--   <tt>SumbitRes</tt>.
 --   
 --   <b>WARNING</b>: Answers are not length-limited. Answers are stripped
 --   of leading and trailing whitespace and run through <a>encode</a>
@@ -66,9 +70,7 @@ data AoC :: Type -> Type
 --   nonsense session key, but <a>Part2</a> always requires a valid session
 --   key.
 --   
---   Note also that Challenge #25 typically only has a single part, so the
---   command <tt><a>AoCPrompt</a> (<a>mkDay_</a> 25) <a>Part2</a></tt> will
---   always fail.
+--   Note also that Challenge #25 typically only has a single part.
 data Part
 Part1 :: Part
 Part2 :: Part
@@ -88,7 +90,7 @@ Part2 :: Part
 --   If no cache directory is given, one will be allocated using
 --   <a>getTemporaryDirectory</a>.
 data AoCOpts
-AoCOpts :: String -> Integer -> Maybe FilePath -> Int -> AoCOpts
+AoCOpts :: String -> Integer -> Maybe FilePath -> Bool -> Int -> AoCOpts
 
 -- | Session key
 [_aSessionKey] :: AoCOpts -> String
@@ -99,6 +101,10 @@ AoCOpts :: String -> Integer -> Maybe FilePath -> Int -> AoCOpts
 -- | Cache directory
 [_aCache] :: AoCOpts -> Maybe FilePath
 
+-- | Fetch results even if cached. Still subject to throttling. Default is
+--   False.
+[_aForce] :: AoCOpts -> Bool
+
 -- | Throttle delay, in milliseconds. Minimum is 1000000. Default is
 --   3000000 (3 seconds).
 [_aThrottle] :: AoCOpts -> Int
@@ -106,11 +112,25 @@ AoCOpts :: String -> Integer -> Maybe FilePath -> Int -> AoCOpts
 -- | The result of a submission.
 data SubmitRes
 
--- | global rank
+-- | Correct submission, including global rank (if reported, which usually
+--   happens if rank is under 1000)
 SubCorrect :: Maybe Integer -> SubmitRes
+
+-- | Incorrect submission. Check response text for hints (often, "too high"
+--   or "too low"), and also for the wait time required before the next
+--   submission.
 SubIncorrect :: SubmitRes
+
+-- | Submission was rejected because an incorrect submission was recently
+--   submitted. Check response text for wait time.
 SubWait :: SubmitRes
+
+-- | Submission was rejected because it was sent to an invalid question or
+--   part. Usually happens if you submit to a part you have already
+--   answered or have not yet unlocked.
 SubInvalid :: SubmitRes
+
+-- | Could not parse server response.
 SubUnknown :: SubmitRes
 
 -- | Pretty-print a <a>SubmitRes</a>
@@ -129,6 +149,21 @@ runAoC :: AoCOpts -> AoC a -> IO (Either AoCError a)
 --   Use system temporary directory as cache, and throttle requests to one
 --   request per three seconds.
 defaultAoCOpts :: Integer -> String -> AoCOpts
+
+-- | A possible (syncronous, logical, pure) error returnable from
+--   <a>runAoC</a>. Does not cover any asynchronous or IO errors.
+data AoCError
+
+-- | A libcurl error, with response code and response body
+AoCCurlError :: CurlCode -> String -> AoCError
+
+-- | Tried to get interact with a challenge that has not yet been released.
+--   Contains the amount of time until release.
+AoCReleaseError :: NominalDiffTime -> AoCError
+
+-- | The throttler limit is full. Either make less requests, or adjust it
+--   with <a>setAoCThrottleLimit</a>.
+AoCThrottleError :: AoCError
 
 -- | Prompt release time
 challengeReleaseTime :: Integer -> Finite 25 -> UTCTime
@@ -152,6 +187,10 @@ mkDay :: Integer -> Maybe (Finite 25)
 --   
 --   Inverse of <a>dayInt</a>.
 mkDay_ :: Integer -> Finite 25
+
+-- | Convert a <tt><a>Finite</a> 25</tt> day into a day integer (1 - 25).
+--   Inverse of <a>mkDay</a>.
+dayInt :: Finite 25 -> Integer
 
 -- | Get the day associated with a given API command.
 aocDay :: AoC a -> Finite 25
