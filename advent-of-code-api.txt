@@ -94,14 +94,20 @@ AoCOpts :: String -> Integer -> Maybe FilePath -> Bool -> Int -> [CurlOption] ->
 -- | Session key
 [_aSessionKey] :: AoCOpts -> String
 
+-- | Year of challenge
+[_aYear] :: AoCOpts -> Integer
+
 -- | Cache directory. If <a>Nothing</a> is given, one will be allocated
 --   using <a>getTemporaryDirectory</a>.
-[_aYear] :: AoCOpts -> Integer
 [_aCache] :: AoCOpts -> Maybe FilePath
 
 -- | Fetch results even if cached. Still subject to throttling. Default is
 --   False.
 [_aForce] :: AoCOpts -> Bool
+
+-- | Throttle delay, in milliseconds. Minimum is 1000000. Default is
+--   3000000 (3 seconds).
+[_aThrottle] :: AoCOpts -> Int
 
 -- | (Low-level usage) Extra <a>CurlOption</a> options to feed to the
 --   libcurl bindings. Meant for things like proxy options and custom SSL
@@ -109,7 +115,6 @@ AoCOpts :: String -> Integer -> Maybe FilePath -> Bool -> Int -> [CurlOption] ->
 --   the library manages cookies, request methods, etc. for you. Anything
 --   other than tweaking low-level network options (like the ones mentioned
 --   previously) will likely break everything. Default is <tt>[]</tt>.
-[_aThrottle] :: AoCOpts -> Int
 [_aCurlOpts] :: AoCOpts -> [CurlOption]
 
 -- | The result of a submission.
@@ -160,7 +165,7 @@ data AoCError
 -- | A libcurl error, with response code and response body
 AoCCurlError :: CurlCode -> String -> AoCError
 
--- | Tried to get interact with a challenge that has not yet been released.
+-- | Tried to interact with a challenge that has not yet been released.
 --   Contains the amount of time until release.
 AoCReleaseError :: NominalDiffTime -> AoCError
 
