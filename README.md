@@ -9,8 +9,8 @@ Specify your requests with 'AoC' and 'AoCOpts', and run them with
 Example:
 
 ```haskell
--- fetch prompt for day 5, part 2
-'runAoC' myOpts $ 'AoCPrompt' ('mkDay_' 5) 'Part2'
+-- fetch prompts for day 5
+'runAoC' myOpts $ 'AoCPrompt' ('mkDay_' 5)
 
 -- fetch input for day 8
 'runAoC' myOpts $ 'AoCInput' ('mkDay_' 8)

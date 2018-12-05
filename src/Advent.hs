@@ -8,6 +8,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
 {-# LANGUAGE TypeInType         #-}
+{-# LANGUAGE ViewPatterns       #-}
 
 -- |
 -- Module      : Advent
@@ -27,8 +28,8 @@
 -- Example:
 --
 -- @
--- -- fetch prompt for day 5, part 2
--- 'runAoC' myOpts $ 'AoCPrompt' ('mkDay_' 5) 'Part2'
+-- -- fetch prompts for day 5
+-- 'runAoC' myOpts $ 'AoCPrompt' ('mkDay_' 5)
 --
 -- -- fetch input for day 8
 -- 'runAoC' myOpts $ 'AoCInput' ('mkDay_' 8)
@@ -50,13 +51,14 @@ module Advent (
   , SubmitRes(..), showSubmitRes
   , runAoC
   , defaultAoCOpts
+  , AoCError(..)
   -- ** Calendar
   , challengeReleaseTime
   , timeToRelease
   , challengeReleased
   -- * Utility
   -- ** Day
-  , mkDay, mkDay_
+  , mkDay, mkDay_, dayInt
   , aocDay
   -- ** Part
   , partChar, partInt
@@ -73,24 +75,26 @@ import           Control.Monad.Except
 import           Data.Char
 import           Data.Finite
 import           Data.Kind
+import           Data.Map              (Map)
 import           Data.Maybe
 import           Data.Semigroup
-import           Data.Set             (Set)
-import           Data.Text            (Text)
+import           Data.Set              (Set)
+import           Data.Text             (Text)
 import           Data.Time
 import           Data.Typeable
-import           GHC.Generics         (Generic)
+import           GHC.Generics          (Generic)
 import           Network.Curl
 import           System.Directory
 import           System.FilePath
 import           Text.Printf
-import           Text.Read            (readMaybe)
-import qualified Data.Map             as M
-import qualified Data.Text            as T
-import qualified Data.Text.Lazy       as TL
-import qualified Network.URI.Encode   as URI
-import qualified System.IO.Unsafe     as Unsafe
-import qualified Text.Taggy           as H
+import           Text.Read             (readMaybe)
+import qualified Data.Map              as M
+import qualified Data.Set              as S
+import qualified Data.Text             as T
+import qualified Data.Text.Lazy        as TL
+import qualified Network.URI.Encode    as URI
+import qualified System.IO.Unsafe      as Unsafe
+import qualified Text.Taggy            as H
 
 initialThrottleLimit :: Int
 initialThrottleLimit = 300
@@ -108,11 +112,23 @@ getAoCThrottleLimit :: IO Int
 getAoCThrottleLimit = getLimit aocThrottler
 
 -- | The result of a submission.
-data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
-               | SubIncorrect
-               | SubWait
-               | SubInvalid
-               | SubUnknown
+data SubmitRes
+    -- | Correct submission, including global rank (if reported, which
+    -- usually happens if rank is under 1000)
+    = SubCorrect (Maybe Integer)
+    -- | Incorrect submission.  Check response text for hints (often, "too
+    -- high" or "too low"), and also for the wait time required before the
+    -- next submission.
+    | SubIncorrect
+    -- | Submission was rejected because an incorrect submission was
+    -- recently submitted.  Check response text for wait time.
+    | SubWait
+    -- | Submission was rejected because it was sent to an invalid question
+    -- or part.  Usually happens if you submit to a part you have already
+    -- answered or have not yet unlocked.
+    | SubInvalid
+    -- | Could not parse server response.
+    | SubUnknown
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | A given part of a problem.  All Advent of Code challenges are
@@ -121,8 +137,7 @@ data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
 -- You can usually get 'Part1' (if it is already released) with a nonsense
 -- session key, but 'Part2' always requires a valid session key.
 --
--- Note also that Challenge #25 typically only has a single part, so the
--- command @'AoCPrompt' ('mkDay_' 25) 'Part2'@ will always fail.
+-- Note also that Challenge #25 typically only has a single part.
 data Part = Part1 | Part2
   deriving (Show, Read, Eq, Ord, Enum, Bounded, Typeable, Generic)
 
@@ -134,34 +149,34 @@ data Part = Part1 | Part2
 -- convert an integer day (1 - 25) into a @'Finite' 25@ representing that
 -- day using 'mkDay' or 'mkDay_'.
 data AoC :: Type -> Type where
-    -- | Fetch prompts, as HTML.
+    -- | Fetch prompts for a given day.  Returns a 'Map' of 'Part's and
+    -- their associated promps, as HTML.
     AoCPrompt
-        :: Finite 25             -- ^ Day
-        -> Part                  -- ^ Part
-        -> AoC Text              -- ^ Prompt (as HTML)
+        :: Finite 25
+        -> AoC (Map Part Text)
 
-    -- | Fetch input
-    AoCInput
-        :: Finite 25             -- ^ Day
-        -> AoC Text
+    -- | Fetch input, as plaintext.  Returned verbatim.  Be aware that
+    -- input might contain trailing newlines.
+    AoCInput :: Finite 25 -> AoC Text
 
-    -- | Submit answer.
+    -- | Submit a plaintext answer (the 'String') to a given day and part.
+    -- Receive a server reponse (as HTML) and a response code 'SumbitRes'.
     --
     -- __WARNING__: Answers are not length-limited.  Answers are stripped
     -- of leading and trailing whitespace and run through 'URI.encode'
     -- before submitting.
     AoCSubmit
-        :: Finite 25              -- ^ Day
-        -> Part                   -- ^ Part
-        -> String                 -- ^ Answer (see warnings)
-        -> AoC (Text, SubmitRes)  -- ^ Submission reply (as HTML), and result status
+        :: Finite 25
+        -> Part
+        -> String
+        -> AoC (Text, SubmitRes)
 
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
 
 -- | Get the day associated with a given API command.
 aocDay :: AoC a -> Finite 25
-aocDay (AoCPrompt d _  ) = d
+aocDay (AoCPrompt d    ) = d
 aocDay (AoCInput  d    ) = d
 aocDay (AoCSubmit d _ _) = d
 
@@ -173,9 +188,6 @@ data AoCError
     -- | Tried to get interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime
-    -- | A given part was not found for a part.  Contains all of the parts
-    -- that were found.
-    | AoCPartError (Set Part)
     -- | The throttler limit is full.  Either make less requests, or adjust
     -- it with 'setAoCThrottleLimit'.
     | AoCThrottleError
@@ -200,6 +212,7 @@ data AoCOpts = AoCOpts
     { _aSessionKey :: String          -- ^ Session key
     , _aYear       :: Integer         -- ^ Year of challenge
     , _aCache      :: Maybe FilePath  -- ^ Cache directory
+    , _aForce      :: Bool            -- ^ Fetch results even if cached.  Still subject to throttling.  Default is False.
     , _aThrottle   :: Int             -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.  Default is 3000000 (3 seconds).
     }
   deriving (Show, Typeable, Generic)
@@ -216,15 +229,16 @@ defaultAoCOpts y s = AoCOpts
     { _aSessionKey = s
     , _aYear       = y
     , _aCache      = Nothing
+    , _aForce      = False
     , _aThrottle   = 3000000
     }
 
 -- | API endpoint for a given command.
 apiUrl :: Integer -> AoC a -> FilePath
 apiUrl y = \case
-    AoCPrompt i _   -> printf "https://adventofcode.com/%04y/day/%d"        y (dayInt i)
-    AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dayInt i)
-    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04y/day/%d/answer" y (dayInt i)
+    AoCPrompt i     -> printf "https://adventofcode.com/%04d/day/%d"        y (dayInt i)
+    AoCInput  i     -> printf "https://adventofcode.com/%04d/day/%d/input"  y (dayInt i)
+    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04d/day/%d/answer" y (dayInt i)
 
 -- | Create a cookie option from a session key.
 sessionKeyCookie :: String -> CurlOption
@@ -232,7 +246,7 @@ sessionKeyCookie = CurlCookie . printf "session=%s"
 
 apiCurl :: String -> AoC a -> [CurlOption]
 apiCurl sess = \case
-    AoCPrompt _ _     -> sessionKeyCookie sess
+    AoCPrompt _       -> sessionKeyCookie sess
                        : method_GET
     AoCInput  _       -> sessionKeyCookie sess
                        : method_GET
@@ -251,9 +265,9 @@ apiCache
     -> AoC a
     -> Maybe FilePath
 apiCache sess = \case
-    AoCPrompt d p -> Just $ printf "prompt/%02d%c.txt"       (dayInt d) (partChar p)
-    AoCInput  d   -> Just $ printf "input/%s%02d.txt" keyDir (dayInt d)
-    AoCSubmit{}   -> Nothing
+    AoCPrompt d -> Just $ printf "prompt/%02d.yaml"        (dayInt d)
+    AoCInput  d -> Just $ printf "input/%s%02d.txt" keyDir (dayInt d)
+    AoCSubmit{} -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
@@ -273,7 +287,10 @@ runAoC AoCOpts{..} a = do
 
     let cacher = case apiCache keyMayb a of
           Nothing -> id
-          Just fp -> cacheing (cacheDir </> fp) sl
+          Just fp -> cacheing (cacheDir </> fp) $
+                       if _aForce
+                         then noCache
+                         else saverLoader a
 
     cacher . withCurlDo . runExceptT $ do
       rel <- liftIO $ timeToRelease _aYear (aocDay a)
@@ -287,41 +304,25 @@ runAoC AoCOpts{..} a = do
       case cc of
         CurlOK -> return ()
         _      -> throwError $ AoCCurlError cc r
-      either throwError pure $ processAoC a r
+      pure $ processAoC a r
   where
     u = apiUrl _aYear a
-    sl = case a of
-      AoCPrompt{} -> SL { _slSave = either (const Nothing) (Just . T.unpack)
-                        , _slLoad = Just . Right . T.pack
-                        }
-      AoCInput{}  -> SL { _slSave = either (const Nothing) (Just . T.unpack)
-                        , _slLoad = Just . Right . T.pack
-                        }
-      AoCSubmit{} -> SL { _slSave = const Nothing
-                        , _slLoad = const Nothing
-                        }
 
 -- | Process a string response into the type desired.
-processAoC :: AoC a -> String -> Either AoCError a
+processAoC :: AoC a -> String -> a
 processAoC = \case
-    AoCPrompt _ p -> packagePrompt p
-                   . M.fromList
-                   . zip [Part1 ..]
-                   . processHTML
-    AoCInput{}    -> Right . T.pack
-    AoCSubmit{}   -> Right
-                   . (\o -> (o, parseSubmitRes o))
-                   . fromMaybe ""
-                   . listToMaybe
-                   . processHTML
-  where
-    packagePrompt p mp = case M.lookup p mp of
-      Just pr -> Right pr
-      Nothing -> Left $ AoCPartError (M.keysSet mp)
+    AoCPrompt _ -> M.fromList
+                 . zip [Part1 ..]
+                 . processHTML
+    AoCInput{}  -> T.pack
+    AoCSubmit{} -> (\o -> (o, parseSubmitRes o))
+                 . fromMaybe ""
+                 . listToMaybe
+                 . processHTML
 
 -- | Process an HTML webpage into a list of all contents in <article>s
 processHTML :: String -> [T.Text]
-processHTML = map (TL.toStrict . TL.unlines . map H.render)
+processHTML = map (TL.toStrict . TL.intercalate "\n" . map H.render)
             . mapMaybe isArticle
             . foldMap universe
             . listToMaybe
@@ -360,6 +361,36 @@ showSubmitRes = \case
     SubWait             -> "Wait"
     SubInvalid          -> "Invalid"
     SubUnknown          -> "Unknown"
+
+saverLoader :: AoC a -> SaverLoader (Either AoCError a)
+saverLoader = \case
+    AoCPrompt d -> SL { _slSave = either (const Nothing) (Just . encodeMap)
+                      , _slLoad = \str ->
+                          let mp = decodeMap str
+                              hasAll = S.null (expectedParts d `S.difference` M.keysSet mp)
+                          in  Right mp <$ guard hasAll
+                      }
+    AoCInput{}  -> SL { _slSave = either (const Nothing) Just
+                      , _slLoad = Just . Right
+                      }
+    AoCSubmit{} -> noCache
+  where
+    expectedParts :: Finite 25 -> Set Part
+    expectedParts n
+      | n == 24   = S.singleton Part1
+      | otherwise = S.fromDistinctAscList [Part1 ..]
+    sep = ">>>>>>>>>"
+    encodeMap mp = T.intercalate "\n" . concat $
+                            [ maybeToList $ M.lookup Part1 mp
+                            , [sep]
+                            , maybeToList $ M.lookup Part2 mp
+                            ]
+    decodeMap xs = mkMap Part1 part1 <> mkMap Part2 part2
+      where
+        (part1, drop 1 -> part2) = span (/= sep) (T.lines xs)
+        mkMap p (T.intercalate "\n"->ln)
+          | T.null (T.strip ln) = M.empty
+          | otherwise           = M.singleton p ln
 
 -- | Construct a @'Finite' 25@ (the type of a Day) from a day
 -- integer (1 - 25).  If input is out of range, 'Nothing' is returned.  See

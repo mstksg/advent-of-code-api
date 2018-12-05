@@ -36,6 +36,7 @@ library:
   - base >= 4.9 && < 5
   - containers
   - curl
+  - deepseq
   - directory
   - filepath
   - finite-typelits

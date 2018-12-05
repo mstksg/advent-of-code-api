@@ -4,19 +4,26 @@
 module Advent.Cache (
     cacheing
   , SaverLoader(..)
+  , noCache
   ) where
 
+import           Control.DeepSeq
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Data.Text              (Text)
 import           System.Directory
 import           System.FilePath
 import           System.IO.Error
+import qualified Data.Text.IO           as T
 
 data SaverLoader a =
-     SL { _slSave :: a -> Maybe String
-        , _slLoad :: String -> Maybe a
+     SL { _slSave :: a -> Maybe Text
+        , _slLoad :: Text -> Maybe a
         }
+
+noCache :: SaverLoader a
+noCache = SL (const Nothing) (const Nothing)
 
 cacheing
     :: MonadIO m
@@ -31,15 +38,12 @@ cacheing fp SL{..} act = do
     case old of
       Nothing -> do
         r <- act
-        liftIO . mapM_ (writeFile fp) $ _slSave r
+        liftIO . mapM_ (T.writeFile fp) $ _slSave r
         pure r
       Just o  -> pure o
 
-readFileMaybe :: FilePath -> IO (Maybe String)
+readFileMaybe :: FilePath -> IO (Maybe Text)
 readFileMaybe =
-     (traverse (evaluate . forceString) . either (const Nothing) Just =<<)
+     (traverse (evaluate . force) . either (const Nothing) Just =<<)
    . tryJust (guard . isDoesNotExistError)
-   . readFile
-
-forceString :: String -> String
-forceString xs = length xs `seq` xs
+   . T.readFile
