@@ -31,15 +31,17 @@ dependencies:
 library:
   source-dirs: src
   dependencies:
-  - finite-typelits
   - containers
-  - text
   - curl
-  - mtl
-  - taggy
   - directory
   - filepath
-  - binary
+  - finite-typelits
+  - mtl
+  - taggy
+  - text
+  - time
+  - uri-encode
+  - yaml
 
 # executables:
 #   advent-of-code-api-exe:

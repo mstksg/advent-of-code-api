@@ -15,6 +15,11 @@ module Advent (
   , AoCSettings(..)
   , SubmitRes(..), showSubmitRes
   , runAoC
+  , aocDay
+  -- ** Calendar
+  , challengeReleaseTime
+  , timeToRelease
+  , challengeReleased
   -- * Utility
   -- ** Day
   , mkDay, mkDay_
@@ -35,6 +40,7 @@ import           Data.Map             (Map)
 import           Data.Maybe
 import           Data.Semigroup
 import           Data.Text            (Text)
+import           Data.Time
 import           Data.Typeable
 import           Network.Curl
 import           System.Directory
@@ -44,6 +50,7 @@ import           Text.Read            (readMaybe)
 import qualified Data.Map             as M
 import qualified Data.Text            as T
 import qualified Data.Text.Lazy       as TL
+import qualified Network.URI.Encode   as URI
 import qualified System.IO.Unsafe     as Unsafe
 import qualified Text.Taggy           as H
 
@@ -87,19 +94,32 @@ data AoC :: Type -> Type where
         -> AoC Text
 
     -- | Submit answer.
+    --
+    -- __WARNING__: Answers are not length-limited.  Answers are stripped
+    -- of leading and trailing whitespace and run through 'URI.encode'
+    -- before submitting.
     AoCSubmit
         :: Finite 25              -- ^ Day.
         -> Char                   -- ^ Part.  \'a\' for part 1, \'b\' for part 2, etc.
-        -> String                 -- ^ Answer.  __WARNING__: not escaped or length-limited.
+        -> String                 -- ^ Answer.  Is not length-limited.
         -> AoC (Text, SubmitRes)  -- ^ Submission reply (as HTML), and result token
 
 deriving instance Show (AoC a)
+
+-- | Get the day associated with a given API command.
+aocDay :: AoC a -> Finite 25
+aocDay (AoCPrompt d    ) = d
+aocDay (AoCInput  d    ) = d
+aocDay (AoCSubmit d _ _) = d
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
 data AoCError
     -- | A libcurl error, with response code and response body
     = AoCCurlError CurlCode String
+    -- | Tried to get interact with a challenge that has not yet been
+    -- released.  Contains the amount of time until release.
+    | AoCReleaseError NominalDiffTime
     -- | The throttler limit is full.  Either make less requests, or adjust
     -- it with 'setAoCThrottleLimit'.
     | AoCThrottleError
@@ -131,17 +151,14 @@ data AoCSettings = AoCSettings
 -- | API endpoint for a given command.
 apiUrl :: Integer -> AoC a -> FilePath
 apiUrl y = \case
-    AoCPrompt i     -> printf "https://adventofcode.com/%04y/day/%d"        y (dNum i)
-    AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dNum i)
-    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04y/day/%d/answer" y (dNum i)
-  where
-    dNum = (+ 1) . getFinite
+    AoCPrompt i     -> printf "https://adventofcode.com/%04y/day/%d"        y (dayToInt i)
+    AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dayToInt i)
+    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04y/day/%d/answer" y (dayToInt i)
 
 -- | Create a cookie option from a session key.
 sessionKeyCookie :: String -> CurlOption
 sessionKeyCookie = CurlCookie . printf "session=%s"
 
--- | WARNING: does not escape submission answers or limit their length.
 apiCurl :: String -> AoC a -> [CurlOption]
 apiCurl sess = \case
     AoCPrompt _       -> sessionKeyCookie sess
@@ -150,23 +167,24 @@ apiCurl sess = \case
                        : method_GET
     AoCSubmit _ p ans -> sessionKeyCookie sess
                        : CurlPostFields [ printf "level=%d" (partNum p)
-                                        , printf "answer=%s" (strip ans)
+                                        , printf "answer=%s" (enc ans)
                                         ]
                        : CurlHttpHeaders ["Content-Type: application/x-www-form-urlencoded"]
                        : method_POST
   where
+    enc = URI.encode . strip
     partNum p = ord p - ord 'a' + 1
 
+-- | Cache file for a given 'AoC' command
 apiCache
     :: Maybe String           -- ^ session key
     -> AoC a
     -> Maybe FilePath
 apiCache sess = \case
-    AoCPrompt d -> Just $ printf "prompt/%02d.yaml" (dNum d)
-    AoCInput  d -> Just $ printf "input/%s%02d.yaml" keyDir (dNum d)
+    AoCPrompt d -> Just $ printf "prompt/%02d.yaml"         (dayToInt d)
+    AoCInput  d -> Just $ printf "input/%s%02d.yaml" keyDir (dayToInt d)
     AoCSubmit{} -> Nothing
   where
-    dNum = (+ 1) . getFinite
     keyDir = case sess of
       Nothing -> ""
       Just s  -> strip s ++ "/"
@@ -174,8 +192,9 @@ apiCache sess = \case
 -- | Run an 'API' command with a given 'AoCSettings' to produce the result
 -- or a list of (lines of) errors.
 --
--- __WARNING__: Does not escape submission answers or limit their length,
--- for 'ASubmit'.
+-- __WARNING__: Answers are not length-limited.  Answers are stripped
+-- of leading and trailing whitespace and run through 'URI.encode'
+-- before submitting.
 runAoC :: AoCSettings -> AoC a -> IO (Either AoCError a)
 runAoC AoCSettings{..} a = do
     (keyMayb, cacheDir) <- case _aCache of
@@ -187,6 +206,10 @@ runAoC AoCSettings{..} a = do
           Just fp -> cacheing (cacheDir </> fp) sl
 
     cacher . withCurlDo . runExceptT $ do
+      rel <- liftIO $ timeToRelease _aYear (aocDay a)
+      when (rel > 0) $
+        throwError $ AoCReleaseError rel
+      
       (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<) 
                . liftIO
                . throttling aocThrottler _aThrottle
@@ -263,12 +286,16 @@ showSubmitRes = \case
 -- | Construct a @'Finite' 25@ (the type of a Day) from a day
 -- integer (1 - 25).  If input is out of range, 'Nothing' is returned.  See
 -- 'mkDay_' for an unsafe version useful for literals.
+--
+-- Inverse of 'dayToInt'.
 mkDay :: Integer -> Maybe (Finite 25)
 mkDay = packFinite . subtract 1
 
 -- | Construct a @'Finite' 25@ (the type of a Day) from a day
 -- integer (1 - 25).  Is undefined if input is out of range.  Can be useful
 -- for compile-time literals, like @'mkDay_' 4@
+--
+-- Inverse of 'dayToInt'.
 mkDay_ :: Integer -> Finite 25
 mkDay_ = fromMaybe e . mkDay
   where
@@ -283,8 +310,32 @@ universe = ($ []) . appEndo . go
                                       <> foldMap go eltChildren
     go (H.NodeContent _              ) = mempty
 
--- eitherToMaybe :: Either e a -> Maybe a
--- eitherToMaybe = either (const Nothing) Just
+-- | Get time until release of a given challenge.
+timeToRelease
+    :: Integer              -- ^ year
+    -> Finite 25            -- ^ day
+    -> IO NominalDiffTime
+timeToRelease y d = (challengeReleaseTime y d `diffUTCTime`) <$> getCurrentTime
+
+-- | Check if a challenge has been released yet.
+challengeReleased
+    :: Integer              -- ^ year
+    -> Finite 25            -- ^ day
+    -> IO Bool
+challengeReleased y = fmap (<= 0) . timeToRelease y
+
+-- | Prompt release time
+challengeReleaseTime
+    :: Integer              -- ^ year
+    -> Finite 25            -- ^ day
+    -> UTCTime
+challengeReleaseTime y d = UTCTime (fromGregorian y 12 (fromIntegral (dayToInt d)))
+                                   (5 * 60 * 60)
+
+-- | Convert a @'Finite' 25@ day into a day integer (1 - 25).  Inverse of
+-- 'mkDay'.
+dayToInt :: Finite 25 -> Integer
+dayToInt = (+ 1) . getFinite
 
 strip :: String -> String
 strip = T.unpack . T.strip . T.pack

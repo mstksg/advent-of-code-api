@@ -13,9 +13,9 @@ import           Data.Bifunctor
 import           System.Directory
 import           System.FilePath
 import           System.IO.Error
-import qualified Data.Binary            as Bi
+import qualified Data.Yaml              as Y
 
-data SaverLoader a = forall b. Bi.Binary b
+data SaverLoader a = forall b. (Y.ToJSON b, Y.FromJSON b)
   => SL { _slSave :: a -> Maybe b
         , _slLoad :: b -> Maybe a
         }
@@ -33,13 +33,12 @@ cacheing fp SL{..} act = do
     case old of
       Nothing -> do
         r <- act
-        liftIO . mapM_ (Bi.encodeFile fp) $ _slSave r
+        liftIO . mapM_ (Y.encodeFile fp) $ _slSave r
         pure r
       Just o  -> pure o
 
-readFileMaybe :: Bi.Binary a => FilePath -> IO (Maybe a)
+readFileMaybe :: Y.FromJSON a => FilePath -> IO (Maybe a)
 readFileMaybe =
      (traverse evaluate . either (const Nothing) Just . join . (fmap . first) (const ()) =<<)
    . tryJust (guard . isDoesNotExistError)
-   . Bi.decodeFileOrFail
-
+   . Y.decodeFileEither
