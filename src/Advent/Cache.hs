@@ -14,7 +14,6 @@ import           System.Directory
 import           System.FilePath
 import           System.IO.Error
 import qualified Data.Binary            as Bi
-import qualified Data.Text              as T
 
 data SaverLoader a = forall b. Bi.Binary b
   => SL { _slSave :: a -> Maybe b

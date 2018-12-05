@@ -16,10 +16,16 @@ module Advent (
   , SubmitRes(..), showSubmitRes
   , runAoC
   -- * Utility
+  -- ** Day
   , mkDay, mkDay_
+  -- ** Throttler
+  , setAoCThrottleLimit, getAoCThrottleLimit
+  -- * Internal
+  , parseSubmitRes
   ) where
 
 import           Advent.Cache
+import           Advent.Throttle
 import           Control.Exception
 import           Control.Monad.Except
 import           Data.Char
@@ -38,7 +44,23 @@ import           Text.Read            (readMaybe)
 import qualified Data.Map             as M
 import qualified Data.Text            as T
 import qualified Data.Text.Lazy       as TL
+import qualified System.IO.Unsafe     as Unsafe
 import qualified Text.Taggy           as H
+
+initialThrottleLimit :: Int
+initialThrottleLimit = 1000
+
+aocThrottler :: Throttler
+aocThrottler = Unsafe.unsafePerformIO $ newThrottler initialThrottleLimit
+{-# NOINLINE aocThrottler #-}
+
+-- | Set the internal throttler maximum queue capacity.  Default is 1000.
+setAoCThrottleLimit :: Int -> IO ()
+setAoCThrottleLimit = setLimit aocThrottler
+
+-- | Get the internal throttler maximum queue capacity.
+getAoCThrottleLimit :: IO Int
+getAoCThrottleLimit = getLimit aocThrottler
 
 -- | The result of a submission.
 data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
@@ -52,11 +74,13 @@ data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
 -- results of type @a@.
 data AoC :: Type -> Type where
     -- | Fetch prompts, as HTML.
+    --
+    -- Note that you can give a bogus Session Key and still get Part 1 of
+    -- a given day, provided the day is already released.
     AoCPrompt
         :: Finite 25             -- ^ Day.
         -> AoC (Map Char Text)   -- ^ Map of prompts (as markdown). Part 1 is under @\'a\'@,
                                  --   Part 2 is under @\'b\'@, etc.
-
     -- | Fetch input
     AoCInput
         :: Finite 25             -- ^ Day.
@@ -73,9 +97,12 @@ deriving instance Show (AoC a)
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
-data AoCError =
+data AoCError
     -- | A libcurl error, with response code and response body
-    ACurlError CurlCode String
+    = AoCCurlError CurlCode String
+    -- | The throttler limit is full.  Either make less requests, or adjust
+    -- it with 'setAoCThrottleLimit'.
+    | AoCThrottleError
   deriving (Show, Typeable)
 instance Exception AoCError
 
@@ -160,10 +187,13 @@ runAoC AoCSettings{..} a = do
           Just fp -> cacheing (cacheDir </> fp) sl
 
     cacher . withCurlDo . runExceptT $ do
-      (cc, r) <- liftIO $ curlGetString u (apiCurl _aSessionKey a)
+      (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<) 
+               . liftIO
+               . throttling aocThrottler _aThrottle
+               $ curlGetString u (apiCurl _aSessionKey a)
       case cc of
         CurlOK -> return ()
-        _      -> throwError $ ACurlError cc r
+        _      -> throwError $ AoCCurlError cc r
       pure $ processAoC a r
   where
     u = apiUrl _aYear a
