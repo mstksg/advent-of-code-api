@@ -38,8 +38,9 @@
 -- 'runAoC' myOpts $ 'AoCSubmit' ('mkDay_' 10) 'Part1' "hello"
 -- @
 --
--- Please use responsibly.  All actions are rate-limited to a minimum of
--- one request per minute.
+-- Please use responsibly.  All actions are by default rate limited to one
+-- per three seconds, but this can be adjusted to a hard-limited cap of one
+-- per second.
 --
 -- Note that leaderboard API is not yet supported.
 

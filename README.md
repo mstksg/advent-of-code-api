@@ -26,8 +26,8 @@ runAoC myOpts $ AoCSubmit (mkDay_ 10) Part1 "hello"
 ```
 
 Please use responsibly.  All actions are rate-limited to a default of one
-request every three minutes, with ability to adjust up to as fast as a
-hard-coded limit of one request per minute.
+request every three seconds, with ability to adjust up to as fast as a
+hard-coded limit of one request per second.
 
 Note that leaderboard API is not yet supported.
 
