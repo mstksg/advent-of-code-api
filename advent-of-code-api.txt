@@ -5,6 +5,8 @@
 -- | Advent of Code REST API bindings
 --   
 --   Haskell bindings for Advent of Code REST API. Please use responsibly!
+--   
+--   Requires libcurl.
 @package advent-of-code-api
 @version 0.1.0.0
 
@@ -20,6 +22,12 @@ module Advent
 
 -- | An API command. An <tt><a>AoC</a> a</tt> an AoC API request that
 --   returns results of type <tt>a</tt>.
+--   
+--   A lot of these commands take <tt><a>Finite</a> 25</tt>, which
+--   represents a day of December up to and including Christmas Day
+--   (December 25th). You can convert an integer day (1 - 25) into a
+--   <tt><a>Finite</a> 25</tt> representing that day using <a>mkDay</a> or
+--   <a>mkDay_</a>.
 data AoC :: Type -> Type
 
 -- | Fetch prompts, as HTML.
@@ -88,8 +96,9 @@ showSubmitRes :: SubmitRes -> String
 --   before submitting.
 runAoC :: AoCSettings -> AoC a -> IO (Either AoCError a)
 
--- | Get the day associated with a given API command.
-aocDay :: AoC a -> Finite 25
+-- | Sensible defaults for <a>AoCSettings</a> for a given year and session
+--   key.
+defaultAoCSettings :: Integer -> String -> AoCSettings
 
 -- | Prompt release time
 challengeReleaseTime :: Integer -> Finite 25 -> UTCTime
@@ -114,6 +123,9 @@ mkDay :: Integer -> Maybe (Finite 25)
 --   Inverse of <a>dayToInt</a>.
 mkDay_ :: Integer -> Finite 25
 
+-- | Get the day associated with a given API command.
+aocDay :: AoC a -> Finite 25
+
 -- | Set the internal throttler maximum queue capacity. Default is 1000.
 setAoCThrottleLimit :: Int -> IO ()
 
@@ -122,8 +134,11 @@ getAoCThrottleLimit :: IO Int
 
 -- | Parse <a>Text</a> into a <a>SubmitRes</a>.
 parseSubmitRes :: Text -> SubmitRes
+instance GHC.Generics.Generic Advent.AoCSettings
 instance GHC.Show.Show Advent.AoCSettings
+instance GHC.Generics.Generic Advent.AoCError
 instance GHC.Show.Show Advent.AoCError
+instance GHC.Generics.Generic Advent.SubmitRes
 instance GHC.Classes.Ord Advent.SubmitRes
 instance GHC.Classes.Eq Advent.SubmitRes
 instance GHC.Show.Show Advent.SubmitRes
