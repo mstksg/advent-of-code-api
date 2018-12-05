@@ -36,9 +36,9 @@ import           Control.Monad.Except
 import           Data.Char
 import           Data.Finite
 import           Data.Kind
-import           Data.Map             (Map)
 import           Data.Maybe
 import           Data.Semigroup
+import           Data.Set             (Set)
 import           Data.Text            (Text)
 import           Data.Time
 import           Data.Typeable
@@ -86,8 +86,9 @@ data AoC :: Type -> Type where
     -- a given day, provided the day is already released.
     AoCPrompt
         :: Finite 25             -- ^ Day.
-        -> AoC (Map Char Text)   -- ^ Map of prompts (as markdown). Part 1 is under @\'a\'@,
-                                 --   Part 2 is under @\'b\'@, etc.
+        -> Char                  -- ^ Part.  \'a\' for part 1, \'b\' for part 2, etc.
+        -> AoC Text              -- ^ Prompt (as HTML)
+
     -- | Fetch input
     AoCInput
         :: Finite 25             -- ^ Day.
@@ -108,7 +109,7 @@ deriving instance Show (AoC a)
 
 -- | Get the day associated with a given API command.
 aocDay :: AoC a -> Finite 25
-aocDay (AoCPrompt d    ) = d
+aocDay (AoCPrompt d _  ) = d
 aocDay (AoCInput  d    ) = d
 aocDay (AoCSubmit d _ _) = d
 
@@ -120,6 +121,9 @@ data AoCError
     -- | Tried to get interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime
+    -- | A given part was not found for a part.  Contains all of the parts
+    -- that were found.
+    | AoCPartError (Set Char)
     -- | The throttler limit is full.  Either make less requests, or adjust
     -- it with 'setAoCThrottleLimit'.
     | AoCThrottleError
@@ -151,7 +155,7 @@ data AoCSettings = AoCSettings
 -- | API endpoint for a given command.
 apiUrl :: Integer -> AoC a -> FilePath
 apiUrl y = \case
-    AoCPrompt i     -> printf "https://adventofcode.com/%04y/day/%d"        y (dayToInt i)
+    AoCPrompt i _   -> printf "https://adventofcode.com/%04y/day/%d"        y (dayToInt i)
     AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dayToInt i)
     AoCSubmit i _ _ -> printf "https://adventofcode.com/%04y/day/%d/answer" y (dayToInt i)
 
@@ -161,13 +165,13 @@ sessionKeyCookie = CurlCookie . printf "session=%s"
 
 apiCurl :: String -> AoC a -> [CurlOption]
 apiCurl sess = \case
-    AoCPrompt _       -> sessionKeyCookie sess
+    AoCPrompt _ _     -> sessionKeyCookie sess
                        : method_GET
     AoCInput  _       -> sessionKeyCookie sess
                        : method_GET
     AoCSubmit _ p ans -> sessionKeyCookie sess
-                       : CurlPostFields [ printf "level=%d" (partNum p)
-                                        , printf "answer=%s" (enc ans)
+                       : CurlPostFields [ printf "level=%d"  (partNum p)
+                                        , printf "answer=%s" (enc ans  )
                                         ]
                        : CurlHttpHeaders ["Content-Type: application/x-www-form-urlencoded"]
                        : method_POST
@@ -181,9 +185,9 @@ apiCache
     -> AoC a
     -> Maybe FilePath
 apiCache sess = \case
-    AoCPrompt d -> Just $ printf "prompt/%02d.yaml"         (dayToInt d)
-    AoCInput  d -> Just $ printf "input/%s%02d.yaml" keyDir (dayToInt d)
-    AoCSubmit{} -> Nothing
+    AoCPrompt d p -> Just $ printf "prompt/%02d%c.txt"       (dayToInt d) p
+    AoCInput  d   -> Just $ printf "input/%s%02d.txt" keyDir (dayToInt d)
+    AoCSubmit{}   -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
@@ -217,29 +221,37 @@ runAoC AoCSettings{..} a = do
       case cc of
         CurlOK -> return ()
         _      -> throwError $ AoCCurlError cc r
-      pure $ processAoC a r
+      either throwError pure $ processAoC a r
   where
     u = apiUrl _aYear a
     sl = case a of
-      AoCPrompt{} -> SL { _slSave = either (const Nothing) Just
-                        , _slLoad = Just . Right
+      AoCPrompt{} -> SL { _slSave = either (const Nothing) (Just . T.unpack)
+                        , _slLoad = Just . Right . T.pack
                         }
-      AoCInput{}  -> SL { _slSave = either (const Nothing) Just
-                        , _slLoad = Just . Right
+      AoCInput{}  -> SL { _slSave = either (const Nothing) (Just . T.unpack)
+                        , _slLoad = Just . Right . T.pack
                         }
-      AoCSubmit{} -> SL { _slSave = const $ Nothing @()
+      AoCSubmit{} -> SL { _slSave = const Nothing
                         , _slLoad = const Nothing
                         }
 
 -- | Process a string response into the type desired.
-processAoC :: AoC a -> String -> a
+processAoC :: AoC a -> String -> Either AoCError a
 processAoC = \case
-    AoCPrompt{} -> M.fromList . zip ['a'..] . processHTML
-    AoCInput{}  -> T.pack
-    AoCSubmit{} -> (\o -> (o, parseSubmitRes o))
-                 . fromMaybe ""
-                 . listToMaybe
-                 . processHTML
+    AoCPrompt _ p -> packagePrompt p
+                   . M.fromList
+                   . zip ['a'..]
+                   . processHTML
+    AoCInput{}    -> Right . T.pack
+    AoCSubmit{}   -> Right
+                   . (\o -> (o, parseSubmitRes o))
+                   . fromMaybe ""
+                   . listToMaybe
+                   . processHTML
+  where
+    packagePrompt p mp = case M.lookup p mp of
+      Just pr -> Right pr
+      Nothing -> Left $ AoCPartError (M.keysSet mp)
 
 -- | Process an HTML webpage into a list of all contents in <article>s
 processHTML :: String -> [T.Text]

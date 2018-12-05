@@ -41,7 +41,6 @@ library:
   - text
   - time
   - uri-encode
-  - yaml
 
 # executables:
 #   advent-of-code-api-exe:

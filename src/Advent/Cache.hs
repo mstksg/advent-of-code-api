@@ -9,15 +9,13 @@ module Advent.Cache (
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Data.Bifunctor
 import           System.Directory
 import           System.FilePath
 import           System.IO.Error
-import qualified Data.Yaml              as Y
 
-data SaverLoader a = forall b. (Y.ToJSON b, Y.FromJSON b)
-  => SL { _slSave :: a -> Maybe b
-        , _slLoad :: b -> Maybe a
+data SaverLoader a =
+     SL { _slSave :: a -> Maybe String
+        , _slLoad :: String -> Maybe a
         }
 
 cacheing
@@ -33,12 +31,15 @@ cacheing fp SL{..} act = do
     case old of
       Nothing -> do
         r <- act
-        liftIO . mapM_ (Y.encodeFile fp) $ _slSave r
+        liftIO . mapM_ (writeFile fp) $ _slSave r
         pure r
       Just o  -> pure o
 
-readFileMaybe :: Y.FromJSON a => FilePath -> IO (Maybe a)
+readFileMaybe :: FilePath -> IO (Maybe String)
 readFileMaybe =
-     (traverse evaluate . either (const Nothing) Just . join . (fmap . first) (const ()) =<<)
+     (traverse (evaluate . forceString) . either (const Nothing) Just =<<)
    . tryJust (guard . isDoesNotExistError)
-   . Y.decodeFileEither
+   . readFile
+
+forceString :: String -> String
+forceString xs = length xs `seq` xs
