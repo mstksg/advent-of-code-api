@@ -15,11 +15,9 @@ extra-source-files:
 synopsis:            Advent of Code REST API bindings
 category:            Web
 
-# To avoid duplicated efforts in documentation and dealing with the
-# complications of embedding Haddock markup inside cabal files, it is
-# common to point users to the README.md file.
 description: |
     Haskell bindings for Advent of Code REST API.  Please use responsibly!
+    See README.md or "Advent" module for an introduction and tutorial.
 
     Requires libcurl.
 

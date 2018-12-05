@@ -25,16 +25,16 @@
 -- Specify your requests with 'AoC' and 'AoCOpts', and run them with
 -- 'runAoC'.
 --
--- Example:
+-- Examples:
 --
 -- @
--- -- fetch prompts for day 5
+-- -- Fetch prompts for day 5
 -- 'runAoC' myOpts $ 'AoCPrompt' ('mkDay_' 5)
 --
--- -- fetch input for day 8
+-- -- Fetch input for day 8
 -- 'runAoC' myOpts $ 'AoCInput' ('mkDay_' 8)
 --
--- -- submit answer "hello" for day 10, part 1
+-- -- Submit answer "hello" for Day 10, Part 1
 -- 'runAoC' myOpts $ 'AoCSubmit' ('mkDay_' 10) 'Part1' "hello"
 -- @
 --
