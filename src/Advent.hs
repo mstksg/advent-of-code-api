@@ -1,13 +1,21 @@
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE KindSignatures    #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TypeInType        #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GADTs              #-}
+{-# LANGUAGE KindSignatures     #-}
+{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeInType         #-}
 
 module Advent (
+  -- * API
+    AoC(..)
+  , AoCSettings(..)
+  , SubmitRes(..), showSubmitRes
+  , runAoC
   ) where
 
+import           Control.Exception
 import           Control.Monad.Except
 import           Data.Char
 import           Data.Finite
@@ -16,6 +24,7 @@ import           Data.Map             (Map)
 import           Data.Maybe
 import           Data.Semigroup
 import           Data.Text            (Text)
+import           Data.Typeable
 import           Network.Curl
 import           Text.Printf
 import           Text.Read            (readMaybe)
@@ -32,41 +41,45 @@ data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
                | SubUnknown
   deriving (Show, Eq, Ord)
 
--- | An API command.  An @'AoC' k a@ an AoC API request that returns
--- results of type @a@; if @k@ is ''True', it requires a session key.  If
--- @k@ is ''False', it does not.
-data AoC :: Bool -> Type -> Type where
-    -- | Fetch prompts, as Markdown.
+-- | An API command.  An @'AoC' a@ an AoC API request that returns
+-- results of type @a@.
+data AoC :: Type -> Type where
+    -- | Fetch prompts, as HTML.
     AoCPrompt
-        :: Finite 25                    -- ^ Day.
-        -> AoC k      (Map Char Text)   -- ^ Map of prompts (as markdown). Part 1 is under @\'a\'@,
-                                        --   Part 2 is under @\'b\'@, etc.
+        :: Finite 25             -- ^ Day.
+        -> AoC (Map Char Text)   -- ^ Map of prompts (as markdown). Part 1 is under @\'a\'@,
+                                 --   Part 2 is under @\'b\'@, etc.
+
     -- | Fetch input
     AoCInput
-        :: Finite 25                    -- ^ Day.
-        -> AoC 'True Text
+        :: Finite 25             -- ^ Day.
+        -> AoC Text
+
     -- | Submit answer.
     AoCSubmit
-        :: Finite 25                    -- ^ Day.
-        -> Char                         -- ^ Part.  \'a\' for part 1, \'b\' for part 2, etc.
-        -> String                       -- ^ Answer.  __WARNING__: not escaped or length-limited.
-        -> AoC 'True (Text, SubmitRes)  -- ^ Submission reply (as markdown), and result token
+        :: Finite 25              -- ^ Day.
+        -> Char                   -- ^ Part.  \'a\' for part 1, \'b\' for part 2, etc.
+        -> String                 -- ^ Answer.  __WARNING__: not escaped or length-limited.
+        -> AoC (Text, SubmitRes)  -- ^ Submission reply (as HTML), and result token
 
+-- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
+-- Does not cover any asynchronous or IO errors.
 data AoCError =
     -- | A libcurl error, with response code and response body
     ACurlError CurlCode String
+  deriving (Show, Typeable)
+instance Exception AoCError
 
-data SessionKey :: Bool -> Type where
-    HasKey :: String -> SessionKey k
-    NoKey  :: SessionKey 'False
+-- | Setings for running an API request.
+data AoCSettings = AoCSettings
+    { _aSessionKey :: String
+    , _aYear       :: Integer
+    , _aCache      :: FilePath
+    , _aThrottle   :: Int      -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.
+    }
+  deriving Show
 
-data AoCSettings k = AoCSettings { _aSessionKey :: SessionKey k
-                             , _aYear       :: Integer
-                             , _aCache      :: FilePath
-                             , _aThrottle   :: Int
-                             }
-
-apiUrl :: Integer -> AoC k a -> FilePath
+apiUrl :: Integer -> AoC a -> FilePath
 apiUrl y = \case
     AoCPrompt i     -> printf "https://adventofcode.com/%04y/day/%d"        y (dNum i)
     AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dNum i)
@@ -74,18 +87,14 @@ apiUrl y = \case
   where
     dNum = (+ 1) . getFinite
 
-sessionKeyCookie :: SessionKey 'True -> CurlOption
-sessionKeyCookie (HasKey s) = CurlCookie $ printf "session=%s" s
-
-sessionKeyCookieMaybe :: SessionKey k -> Maybe CurlOption
-sessionKeyCookieMaybe (HasKey s) = Just (sessionKeyCookie (HasKey s))
-sessionKeyCookieMaybe NoKey      = Nothing
+sessionKeyCookie :: String -> CurlOption
+sessionKeyCookie = CurlCookie . printf "session=%s"
 
 -- | WARNING: does not escape submission answers or limit their length.
-apiCurl :: SessionKey k -> AoC k a -> [CurlOption]
+apiCurl :: String -> AoC a -> [CurlOption]
 apiCurl sess = \case
-    AoCPrompt _       -> maybeToList (sessionKeyCookieMaybe sess)
-                      ++ method_GET
+    AoCPrompt _       -> sessionKeyCookie sess
+                       : method_GET
     AoCInput  _       -> sessionKeyCookie sess
                        : method_GET
     AoCSubmit _ p ans -> sessionKeyCookie sess
@@ -97,12 +106,12 @@ apiCurl sess = \case
   where
     partNum p = ord p - ord 'a' + 1
 
--- | Run an 'API' command with a given 'SessionKey' to produce the result
+-- | Run an 'API' command with a given 'AoCSettings' to produce the result
 -- or a list of (lines of) errors.
 --
 -- __WARNING__: Does not escape submission answers or limit their length,
 -- for 'ASubmit'.
-runAoC :: AoCSettings k -> AoC k a -> IO (Either AoCError a)
+runAoC :: AoCSettings -> AoC a -> IO (Either AoCError a)
 runAoC AoCSettings{..} a = withCurlDo . runExceptT $ do
     (cc, r) <- liftIO $ curlGetString u (apiCurl _aSessionKey a)
     case cc of
@@ -112,7 +121,7 @@ runAoC AoCSettings{..} a = withCurlDo . runExceptT $ do
   where
     u = apiUrl _aYear a
 
-processAoC :: AoC k a -> String -> a
+processAoC :: AoC a -> String -> a
 processAoC = \case
     AoCPrompt{} -> M.fromList
                  . zip ['a'..]
@@ -153,6 +162,16 @@ parseSubmitRes t
         onlyAlphaNum c
           | isAlphaNum c = c
           | otherwise    = ' '
+
+-- | Pretty-print a 'SubmitRes'
+showSubmitRes :: SubmitRes -> String
+showSubmitRes = \case
+    SubCorrect Nothing  -> "Correct"
+    SubCorrect (Just r) -> printf "Correct (Rank %d)" r
+    SubIncorrect        -> "Incorrect"
+    SubWait             -> "Wait"
+    SubInvalid          -> "Invalid"
+    SubUnknown          -> "Unknown"
 
 universe :: H.Node -> [H.Node]
 universe = ($ []) . appEndo . go
