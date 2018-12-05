@@ -5,6 +5,8 @@
 -- | Advent of Code REST API bindings
 --   
 --   Haskell bindings for Advent of Code REST API. Please use responsibly!
+--   See README.md or <a>Advent</a> module for an introduction and
+--   tutorial.
 --   
 --   Requires libcurl.
 @package advent-of-code-api
@@ -17,16 +19,16 @@
 --   Specify your requests with <a>AoC</a> and <a>AoCOpts</a>, and run them
 --   with <a>runAoC</a>.
 --   
---   Example:
+--   Examples:
 --   
 --   <pre>
---   -- fetch prompts for day 5
+--   -- Fetch prompts for day 5
 --   <a>runAoC</a> myOpts $ <a>AoCPrompt</a> (<a>mkDay_</a> 5)
 --   
---   -- fetch input for day 8
+--   -- Fetch input for day 8
 --   <a>runAoC</a> myOpts $ <a>AoCInput</a> (<a>mkDay_</a> 8)
 --   
---   -- submit answer "hello" for day 10, part 1
+--   -- Submit answer "hello" for Day 10, Part 1
 --   <a>runAoC</a> myOpts $ <a>AoCSubmit</a> (<a>mkDay_</a> 10) <a>Part1</a> "hello"
 --   </pre>
 --   
@@ -86,28 +88,29 @@ Part2 :: Part
 --   
 --   Throttling is hard-limited to a minimum of 1 second between calls.
 --   Please be respectful and do not try to bypass this.
---   
---   If no cache directory is given, one will be allocated using
---   <a>getTemporaryDirectory</a>.
 data AoCOpts
-AoCOpts :: String -> Integer -> Maybe FilePath -> Bool -> Int -> AoCOpts
+AoCOpts :: String -> Integer -> Maybe FilePath -> Bool -> Int -> [CurlOption] -> AoCOpts
 
 -- | Session key
 [_aSessionKey] :: AoCOpts -> String
 
--- | Year of challenge
+-- | Cache directory. If <a>Nothing</a> is given, one will be allocated
+--   using <a>getTemporaryDirectory</a>.
 [_aYear] :: AoCOpts -> Integer
-
--- | Cache directory
 [_aCache] :: AoCOpts -> Maybe FilePath
 
 -- | Fetch results even if cached. Still subject to throttling. Default is
 --   False.
 [_aForce] :: AoCOpts -> Bool
 
--- | Throttle delay, in milliseconds. Minimum is 1000000. Default is
---   3000000 (3 seconds).
+-- | (Low-level usage) Extra <a>CurlOption</a> options to feed to the
+--   libcurl bindings. Meant for things like proxy options and custom SSL
+--   certificates. You should normally not have to add anything here, since
+--   the library manages cookies, request methods, etc. for you. Anything
+--   other than tweaking low-level network options (like the ones mentioned
+--   previously) will likely break everything. Default is <tt>[]</tt>.
 [_aThrottle] :: AoCOpts -> Int
+[_aCurlOpts] :: AoCOpts -> [CurlOption]
 
 -- | The result of a submission.
 data SubmitRes
@@ -202,7 +205,7 @@ partChar :: Part -> Char
 -- | Convert a <a>Part</a> to an <a>Int</a>.
 partInt :: Part -> Int
 
--- | Set the internal throttler maximum queue capacity. Default is 1000.
+-- | Set the internal throttler maximum queue capacity. Default is 100.
 setAoCThrottleLimit :: Int -> IO ()
 
 -- | Get the internal throttler maximum queue capacity.
