@@ -58,7 +58,7 @@ data AoC :: Type -> Type
 
 -- | Submit a plaintext answer (the <a>String</a>) to a given day and part.
 --   Receive a server reponse (as HTML) and a response code
---   <tt>SumbitRes</tt>.
+--   <a>SubmitRes</a>.
 --   
 --   <b>WARNING</b>: Answers are not length-limited. Answers are stripped
 --   of leading and trailing whitespace and run through <a>encode</a>
