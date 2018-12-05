@@ -18,21 +18,38 @@
 -- Stability   : experimental
 -- Portability : non-portable
 --
--- Haskell bindings for Advent of Code 2018 REST API.
+-- Haskell bindings for Advent of Code 2018 API.  Caches and throttles
+-- requests automatically.
 --
--- Specify your requests with 'AoC' and 'AoCSettings', and run them with
+-- Specify your requests with 'AoC' and 'AoCOpts', and run them with
 -- 'runAoC'.
+--
+-- Example:
+--
+-- @
+-- -- fetch prompt for day 5, part 2
+-- 'runAoC' myOpts $ 'AoCPrompt' ('mkDay_' 5) 'Part2'
+--
+-- -- fetch input for day 8
+-- 'runAoC' myOpts $ 'AoCInput' ('mkDay_' 8)
+--
+-- -- submit answer "hello" for day 10, part 1
+-- 'runAoC' myOpts $ 'AoCSubmit' ('mkDay_' 10) 'Part1' "hello"
+-- @
 --
 -- Please use responsibly.  All actions are rate-limited to a minimum of
 -- one request per minute.
+--
+-- Note that leaderboard API is not yet supported.
 
 module Advent (
   -- * API
     AoC(..)
-  , AoCSettings(..)
+  , Part(..)
+  , AoCOpts(..)
   , SubmitRes(..), showSubmitRes
   , runAoC
-  , defaultAoCSettings
+  , defaultAoCOpts
   -- ** Calendar
   , challengeReleaseTime
   , timeToRelease
@@ -41,6 +58,8 @@ module Advent (
   -- ** Day
   , mkDay, mkDay_
   , aocDay
+  -- ** Part
+  , partChar, partInt
   -- ** Throttler
   , setAoCThrottleLimit, getAoCThrottleLimit
   -- * Internal
@@ -96,6 +115,17 @@ data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
                | SubUnknown
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | A given part of a problem.  All Advent of Code challenges are
+-- two-parts.
+--
+-- You can usually get 'Part1' (if it is already released) with a nonsense
+-- session key, but 'Part2' always requires a valid session key.
+--
+-- Note also that Challenge #25 typically only has a single part, so the
+-- command @'AoCPrompt' ('mkDay_' 25) 'Part2'@ will always fail.
+data Part = Part1 | Part2
+  deriving (Show, Read, Eq, Ord, Enum, Bounded, Typeable, Generic)
+
 -- | An API command.  An @'AoC' a@ an AoC API request that returns
 -- results of type @a@.
 --
@@ -105,17 +135,14 @@ data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
 -- day using 'mkDay' or 'mkDay_'.
 data AoC :: Type -> Type where
     -- | Fetch prompts, as HTML.
-    --
-    -- Note that you can give a bogus Session Key and still get Part 1 of
-    -- a given day, provided the day is already released.
     AoCPrompt
-        :: Finite 25             -- ^ Day.
-        -> Char                  -- ^ Part.  \'a\' for part 1, \'b\' for part 2, etc.
+        :: Finite 25             -- ^ Day
+        -> Part                  -- ^ Part
         -> AoC Text              -- ^ Prompt (as HTML)
 
     -- | Fetch input
     AoCInput
-        :: Finite 25             -- ^ Day.
+        :: Finite 25             -- ^ Day
         -> AoC Text
 
     -- | Submit answer.
@@ -124,10 +151,10 @@ data AoC :: Type -> Type where
     -- of leading and trailing whitespace and run through 'URI.encode'
     -- before submitting.
     AoCSubmit
-        :: Finite 25              -- ^ Day.
-        -> Char                   -- ^ Part.  \'a\' for part 1, \'b\' for part 2, etc.
-        -> String                 -- ^ Answer.  Is not length-limited.
-        -> AoC (Text, SubmitRes)  -- ^ Submission reply (as HTML), and result token
+        :: Finite 25              -- ^ Day
+        -> Part                   -- ^ Part
+        -> String                 -- ^ Answer (see warnings)
+        -> AoC (Text, SubmitRes)  -- ^ Submission reply (as HTML), and result status
 
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
@@ -148,7 +175,7 @@ data AoCError
     | AoCReleaseError NominalDiffTime
     -- | A given part was not found for a part.  Contains all of the parts
     -- that were found.
-    | AoCPartError (Set Char)
+    | AoCPartError (Set Part)
     -- | The throttler limit is full.  Either make less requests, or adjust
     -- it with 'setAoCThrottleLimit'.
     | AoCThrottleError
@@ -169,20 +196,23 @@ instance Exception AoCError
 --
 -- If no cache directory is given, one will be allocated using
 -- 'getTemporaryDirectory'.
-data AoCSettings = AoCSettings
+data AoCOpts = AoCOpts
     { _aSessionKey :: String          -- ^ Session key
     , _aYear       :: Integer         -- ^ Year of challenge
     , _aCache      :: Maybe FilePath  -- ^ Cache directory
-    , _aThrottle   :: Int             -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.
+    , _aThrottle   :: Int             -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.  Default is 3000000 (3 seconds).
     }
   deriving (Show, Typeable, Generic)
 
--- | Sensible defaults for 'AoCSettings' for a given year and session key.
-defaultAoCSettings
+-- | Sensible defaults for 'AoCOpts' for a given year and session key.
+--
+-- Use system temporary directory as cache, and throttle requests to one
+-- request per three seconds.
+defaultAoCOpts
     :: Integer
     -> String
-    -> AoCSettings
-defaultAoCSettings y s = AoCSettings
+    -> AoCOpts
+defaultAoCOpts y s = AoCOpts
     { _aSessionKey = s
     , _aYear       = y
     , _aCache      = Nothing
@@ -192,9 +222,9 @@ defaultAoCSettings y s = AoCSettings
 -- | API endpoint for a given command.
 apiUrl :: Integer -> AoC a -> FilePath
 apiUrl y = \case
-    AoCPrompt i _   -> printf "https://adventofcode.com/%04y/day/%d"        y (dayToInt i)
-    AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dayToInt i)
-    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04y/day/%d/answer" y (dayToInt i)
+    AoCPrompt i _   -> printf "https://adventofcode.com/%04y/day/%d"        y (dayInt i)
+    AoCInput  i     -> printf "https://adventofcode.com/%04y/day/%d/input"  y (dayInt i)
+    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04y/day/%d/answer" y (dayInt i)
 
 -- | Create a cookie option from a session key.
 sessionKeyCookie :: String -> CurlOption
@@ -207,14 +237,13 @@ apiCurl sess = \case
     AoCInput  _       -> sessionKeyCookie sess
                        : method_GET
     AoCSubmit _ p ans -> sessionKeyCookie sess
-                       : CurlPostFields [ printf "level=%d"  (partNum p)
+                       : CurlPostFields [ printf "level=%d"  (partInt p)
                                         , printf "answer=%s" (enc ans  )
                                         ]
                        : CurlHttpHeaders ["Content-Type: application/x-www-form-urlencoded"]
                        : method_POST
   where
     enc = URI.encode . strip
-    partNum p = ord p - ord 'a' + 1
 
 -- | Cache file for a given 'AoC' command
 apiCache
@@ -222,22 +251,22 @@ apiCache
     -> AoC a
     -> Maybe FilePath
 apiCache sess = \case
-    AoCPrompt d p -> Just $ printf "prompt/%02d%c.txt"       (dayToInt d) p
-    AoCInput  d   -> Just $ printf "input/%s%02d.txt" keyDir (dayToInt d)
+    AoCPrompt d p -> Just $ printf "prompt/%02d%c.txt"       (dayInt d) (partChar p)
+    AoCInput  d   -> Just $ printf "input/%s%02d.txt" keyDir (dayInt d)
     AoCSubmit{}   -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
       Just s  -> strip s ++ "/"
 
--- | Run an 'API' command with a given 'AoCSettings' to produce the result
+-- | Run an 'AoC' command with a given 'AoCOpts' to produce the result
 -- or a list of (lines of) errors.
 --
 -- __WARNING__: Answers are not length-limited.  Answers are stripped
 -- of leading and trailing whitespace and run through 'URI.encode'
 -- before submitting.
-runAoC :: AoCSettings -> AoC a -> IO (Either AoCError a)
-runAoC AoCSettings{..} a = do
+runAoC :: AoCOpts -> AoC a -> IO (Either AoCError a)
+runAoC AoCOpts{..} a = do
     (keyMayb, cacheDir) <- case _aCache of
       Just c  -> pure (Nothing, c)
       Nothing -> (Just _aSessionKey,) . (</> "advent-of-code-api") <$> getTemporaryDirectory
@@ -277,7 +306,7 @@ processAoC :: AoC a -> String -> Either AoCError a
 processAoC = \case
     AoCPrompt _ p -> packagePrompt p
                    . M.fromList
-                   . zip ['a'..]
+                   . zip [Part1 ..]
                    . processHTML
     AoCInput{}    -> Right . T.pack
     AoCSubmit{}   -> Right
@@ -336,7 +365,7 @@ showSubmitRes = \case
 -- integer (1 - 25).  If input is out of range, 'Nothing' is returned.  See
 -- 'mkDay_' for an unsafe version useful for literals.
 --
--- Inverse of 'dayToInt'.
+-- Inverse of 'dayInt'.
 mkDay :: Integer -> Maybe (Finite 25)
 mkDay = packFinite . subtract 1
 
@@ -344,7 +373,7 @@ mkDay = packFinite . subtract 1
 -- integer (1 - 25).  Is undefined if input is out of range.  Can be useful
 -- for compile-time literals, like @'mkDay_' 4@
 --
--- Inverse of 'dayToInt'.
+-- Inverse of 'dayInt'.
 mkDay_ :: Integer -> Finite 25
 mkDay_ = fromMaybe e . mkDay
   where
@@ -378,13 +407,24 @@ challengeReleaseTime
     :: Integer              -- ^ year
     -> Finite 25            -- ^ day
     -> UTCTime
-challengeReleaseTime y d = UTCTime (fromGregorian y 12 (fromIntegral (dayToInt d)))
+challengeReleaseTime y d = UTCTime (fromGregorian y 12 (fromIntegral (dayInt d)))
                                    (5 * 60 * 60)
 
 -- | Convert a @'Finite' 25@ day into a day integer (1 - 25).  Inverse of
 -- 'mkDay'.
-dayToInt :: Finite 25 -> Integer
-dayToInt = (+ 1) . getFinite
+dayInt :: Finite 25 -> Integer
+dayInt = (+ 1) . getFinite
+
+-- | Convert a 'Part' to an 'Int'.
+partInt :: Part -> Int
+partInt Part1 = 1
+partInt Part2 = 2
+
+-- | A character associated with a given part.  'Part1' is associated with
+-- @\'a\'@, and 'Part2' is associated with @\'b\'@
+partChar :: Part -> Char
+partChar Part1 = 'a'
+partChar Part2 = 'b'
 
 strip :: String -> String
 strip = T.unpack . T.strip . T.pack
