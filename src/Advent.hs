@@ -185,7 +185,7 @@ aocDay (AoCSubmit d _ _) = d
 data AoCError
     -- | A libcurl error, with response code and response body
     = AoCCurlError CurlCode String
-    -- | Tried to get interact with a challenge that has not yet been
+    -- | Tried to interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime
     -- | The throttler limit is full.  Either make less requests, or adjust
@@ -210,7 +210,7 @@ data AoCOpts = AoCOpts
       _aSessionKey :: String
       -- | Year of challenge
     , _aYear       :: Integer
-      -- ^ Cache directory.  If 'Nothing' is given, one will be allocated
+      -- | Cache directory.  If 'Nothing' is given, one will be allocated
       -- using 'getTemporaryDirectory'.
     , _aCache      :: Maybe FilePath
       -- | Fetch results even if cached.  Still subject to throttling.
@@ -219,7 +219,7 @@ data AoCOpts = AoCOpts
       -- | Throttle delay, in milliseconds.  Minimum is 1000000.  Default
       -- is 3000000 (3 seconds).
     , _aThrottle   :: Int
-      -- ^ (Low-level usage) Extra 'CurlOption' options to feed to the
+      -- | (Low-level usage) Extra 'CurlOption' options to feed to the
       -- libcurl bindings.  Meant for things like proxy options and custom
       -- SSL certificates.  You should normally not have to add anything
       -- here, since the library manages cookies, request methods, etc. for
