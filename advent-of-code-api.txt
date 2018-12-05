@@ -11,13 +11,29 @@
 @version 0.1.0.0
 
 
--- | Haskell bindings for Advent of Code 2018 REST API.
+-- | Haskell bindings for Advent of Code 2018 API. Caches and throttles
+--   requests automatically.
 --   
---   Specify your requests with <a>AoC</a> and <a>AoCSettings</a>, and run
---   them with <a>runAoC</a>.
+--   Specify your requests with <a>AoC</a> and <a>AoCOpts</a>, and run them
+--   with <a>runAoC</a>.
+--   
+--   Example:
+--   
+--   <pre>
+--   -- fetch prompt for day 5, part 2
+--   <a>runAoC</a> myOpts $ <a>AoCPrompt</a> (<a>mkDay_</a> 5) <a>Part2</a>
+--   
+--   -- fetch input for day 8
+--   <a>runAoC</a> myOpts $ <a>AoCInput</a> (<a>mkDay_</a> 8)
+--   
+--   -- submit answer "hello" for day 10, part 1
+--   <a>runAoC</a> myOpts $ <a>AoCSubmit</a> (<a>mkDay_</a> 10) <a>Part1</a> "hello"
+--   </pre>
 --   
 --   Please use responsibly. All actions are rate-limited to a minimum of
 --   one request per minute.
+--   
+--   Note that leaderboard API is not yet supported.
 module Advent
 
 -- | An API command. An <tt><a>AoC</a> a</tt> an AoC API request that
@@ -31,10 +47,7 @@ module Advent
 data AoC :: Type -> Type
 
 -- | Fetch prompts, as HTML.
---   
---   Note that you can give a bogus Session Key and still get Part 1 of a
---   given day, provided the day is already released.
-[AoCPrompt] :: Finite 25 -> Char -> AoC Text
+[AoCPrompt] :: Finite 25 -> Part -> AoC Text
 
 -- | Fetch input
 [AoCInput] :: Finite 25 -> AoC Text
@@ -44,7 +57,21 @@ data AoC :: Type -> Type
 --   <b>WARNING</b>: Answers are not length-limited. Answers are stripped
 --   of leading and trailing whitespace and run through <a>encode</a>
 --   before submitting.
-[AoCSubmit] :: Finite 25 -> Char -> String -> AoC (Text, SubmitRes)
+[AoCSubmit] :: Finite 25 -> Part -> String -> AoC (Text, SubmitRes)
+
+-- | A given part of a problem. All Advent of Code challenges are
+--   two-parts.
+--   
+--   You can usually get <a>Part1</a> (if it is already released) with a
+--   nonsense session key, but <a>Part2</a> always requires a valid session
+--   key.
+--   
+--   Note also that Challenge #25 typically only has a single part, so the
+--   command <tt><a>AoCPrompt</a> (<a>mkDay_</a> 25) <a>Part2</a></tt> will
+--   always fail.
+data Part
+Part1 :: Part
+Part2 :: Part
 
 -- | Setings for running an API request.
 --   
@@ -60,20 +87,21 @@ data AoC :: Type -> Type
 --   
 --   If no cache directory is given, one will be allocated using
 --   <a>getTemporaryDirectory</a>.
-data AoCSettings
-AoCSettings :: String -> Integer -> Maybe FilePath -> Int -> AoCSettings
+data AoCOpts
+AoCOpts :: String -> Integer -> Maybe FilePath -> Int -> AoCOpts
 
 -- | Session key
-[_aSessionKey] :: AoCSettings -> String
+[_aSessionKey] :: AoCOpts -> String
 
 -- | Year of challenge
-[_aYear] :: AoCSettings -> Integer
+[_aYear] :: AoCOpts -> Integer
 
 -- | Cache directory
-[_aCache] :: AoCSettings -> Maybe FilePath
+[_aCache] :: AoCOpts -> Maybe FilePath
 
--- | Throttle delay, in milliseconds. Minimum is 1000000.
-[_aThrottle] :: AoCSettings -> Int
+-- | Throttle delay, in milliseconds. Minimum is 1000000. Default is
+--   3000000 (3 seconds).
+[_aThrottle] :: AoCOpts -> Int
 
 -- | The result of a submission.
 data SubmitRes
@@ -88,17 +116,19 @@ SubUnknown :: SubmitRes
 -- | Pretty-print a <a>SubmitRes</a>
 showSubmitRes :: SubmitRes -> String
 
--- | Run an <tt>API</tt> command with a given <a>AoCSettings</a> to produce
---   the result or a list of (lines of) errors.
+-- | Run an <a>AoC</a> command with a given <a>AoCOpts</a> to produce the
+--   result or a list of (lines of) errors.
 --   
 --   <b>WARNING</b>: Answers are not length-limited. Answers are stripped
 --   of leading and trailing whitespace and run through <a>encode</a>
 --   before submitting.
-runAoC :: AoCSettings -> AoC a -> IO (Either AoCError a)
+runAoC :: AoCOpts -> AoC a -> IO (Either AoCError a)
 
--- | Sensible defaults for <a>AoCSettings</a> for a given year and session
---   key.
-defaultAoCSettings :: Integer -> String -> AoCSettings
+-- | Sensible defaults for <a>AoCOpts</a> for a given year and session key.
+--   
+--   Use system temporary directory as cache, and throttle requests to one
+--   request per three seconds.
+defaultAoCOpts :: Integer -> String -> AoCOpts
 
 -- | Prompt release time
 challengeReleaseTime :: Integer -> Finite 25 -> UTCTime
@@ -113,18 +143,25 @@ challengeReleased :: Integer -> Finite 25 -> IO Bool
 --   integer (1 - 25). If input is out of range, <a>Nothing</a> is
 --   returned. See <a>mkDay_</a> for an unsafe version useful for literals.
 --   
---   Inverse of <a>dayToInt</a>.
+--   Inverse of <a>dayInt</a>.
 mkDay :: Integer -> Maybe (Finite 25)
 
 -- | Construct a <tt><a>Finite</a> 25</tt> (the type of a Day) from a day
 --   integer (1 - 25). Is undefined if input is out of range. Can be useful
 --   for compile-time literals, like <tt><a>mkDay_</a> 4</tt>
 --   
---   Inverse of <a>dayToInt</a>.
+--   Inverse of <a>dayInt</a>.
 mkDay_ :: Integer -> Finite 25
 
 -- | Get the day associated with a given API command.
 aocDay :: AoC a -> Finite 25
+
+-- | A character associated with a given part. <a>Part1</a> is associated
+--   with <tt>'a'</tt>, and <a>Part2</a> is associated with <tt>'b'</tt>
+partChar :: Part -> Char
+
+-- | Convert a <a>Part</a> to an <a>Int</a>.
+partInt :: Part -> Int
 
 -- | Set the internal throttler maximum queue capacity. Default is 1000.
 setAoCThrottleLimit :: Int -> IO ()
@@ -134,10 +171,17 @@ getAoCThrottleLimit :: IO Int
 
 -- | Parse <a>Text</a> into a <a>SubmitRes</a>.
 parseSubmitRes :: Text -> SubmitRes
-instance GHC.Generics.Generic Advent.AoCSettings
-instance GHC.Show.Show Advent.AoCSettings
+instance GHC.Generics.Generic Advent.AoCOpts
+instance GHC.Show.Show Advent.AoCOpts
 instance GHC.Generics.Generic Advent.AoCError
 instance GHC.Show.Show Advent.AoCError
+instance GHC.Generics.Generic Advent.Part
+instance GHC.Enum.Bounded Advent.Part
+instance GHC.Enum.Enum Advent.Part
+instance GHC.Classes.Ord Advent.Part
+instance GHC.Classes.Eq Advent.Part
+instance GHC.Read.Read Advent.Part
+instance GHC.Show.Show Advent.Part
 instance GHC.Generics.Generic Advent.SubmitRes
 instance GHC.Classes.Ord Advent.SubmitRes
 instance GHC.Classes.Eq Advent.SubmitRes
