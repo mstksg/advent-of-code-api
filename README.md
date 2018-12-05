@@ -1,6 +1,9 @@
 [advent-of-code-api][]
 ======================
 
+[![advent-of-code-api on Hackage](https://img.shields.io/hackage/v/advent-of-code-api.svg?maxAge=86400)](https://hackage.haskell.org/package/advent-of-code-api)
+[![Build Status](https://travis-ci.org/mstksg/advent-of-code-api.svg?branch=master)](https://travis-ci.org/mstksg/advent-of-code-api)
+
 Haskell bindings for Advent of Code REST API.  Caches and throttles requests
 automatically.
 
@@ -35,7 +38,7 @@ Session Keys
 ------------
 
 Session keys are required for all commands, but if you enter a bogus key
-you should be able to get at least Part 1 from 'AoCPrompt'.
+you should be able to get at least Part 1 from `AoCPrompt`.
 
 The session key can be found by logging in on a web client and checking
 the cookies.  You can usually check these with in-browser developer

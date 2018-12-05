@@ -97,13 +97,13 @@ import qualified System.IO.Unsafe      as Unsafe
 import qualified Text.Taggy            as H
 
 initialThrottleLimit :: Int
-initialThrottleLimit = 300
+initialThrottleLimit = 100
 
 aocThrottler :: Throttler
 aocThrottler = Unsafe.unsafePerformIO $ newThrottler initialThrottleLimit
 {-# NOINLINE aocThrottler #-}
 
--- | Set the internal throttler maximum queue capacity.  Default is 1000.
+-- | Set the internal throttler maximum queue capacity.  Default is 100.
 setAoCThrottleLimit :: Int -> IO ()
 setAoCThrottleLimit = setLimit aocThrottler
 
@@ -160,7 +160,7 @@ data AoC :: Type -> Type where
     AoCInput :: Finite 25 -> AoC Text
 
     -- | Submit a plaintext answer (the 'String') to a given day and part.
-    -- Receive a server reponse (as HTML) and a response code 'SumbitRes'.
+    -- Receive a server reponse (as HTML) and a response code 'SubmitRes'.
     --
     -- __WARNING__: Answers are not length-limited.  Answers are stripped
     -- of leading and trailing whitespace and run through 'URI.encode'
@@ -205,15 +205,28 @@ instance Exception AoCError
 --
 -- Throttling is hard-limited to a minimum of 1 second between calls.
 -- Please be respectful and do not try to bypass this.
---
--- If no cache directory is given, one will be allocated using
--- 'getTemporaryDirectory'.
 data AoCOpts = AoCOpts
-    { _aSessionKey :: String          -- ^ Session key
-    , _aYear       :: Integer         -- ^ Year of challenge
-    , _aCache      :: Maybe FilePath  -- ^ Cache directory
-    , _aForce      :: Bool            -- ^ Fetch results even if cached.  Still subject to throttling.  Default is False.
-    , _aThrottle   :: Int             -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.  Default is 3000000 (3 seconds).
+    { -- | Session key
+      _aSessionKey :: String
+      -- | Year of challenge
+    , _aYear       :: Integer
+      -- ^ Cache directory.  If 'Nothing' is given, one will be allocated
+      -- using 'getTemporaryDirectory'.
+    , _aCache      :: Maybe FilePath
+      -- | Fetch results even if cached.  Still subject to throttling.
+      -- Default is False.
+    , _aForce      :: Bool
+      -- | Throttle delay, in milliseconds.  Minimum is 1000000.  Default
+      -- is 3000000 (3 seconds).
+    , _aThrottle   :: Int
+      -- ^ (Low-level usage) Extra 'CurlOption' options to feed to the
+      -- libcurl bindings.  Meant for things like proxy options and custom
+      -- SSL certificates.  You should normally not have to add anything
+      -- here, since the library manages cookies, request methods, etc. for
+      -- you.  Anything other than tweaking low-level network options (like
+      -- the ones mentioned previously) will likely break everything.
+      -- Default is @[]@.
+    , _aCurlOpts   :: [CurlOption]
     }
   deriving (Show, Typeable, Generic)
 
@@ -231,6 +244,7 @@ defaultAoCOpts y s = AoCOpts
     , _aCache      = Nothing
     , _aForce      = False
     , _aThrottle   = 3000000
+    , _aCurlOpts   = []
     }
 
 -- | API endpoint for a given command.
@@ -300,7 +314,7 @@ runAoC AoCOpts{..} a = do
       (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<)
                . liftIO
                . throttling aocThrottler (max 1000000 _aThrottle)
-               $ curlGetString u (apiCurl _aSessionKey a)
+               $ curlGetString u (apiCurl _aSessionKey a ++ _aCurlOpts)
       case cc of
         CurlOK -> return ()
         _      -> throwError $ AoCCurlError cc r

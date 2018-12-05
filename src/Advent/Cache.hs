@@ -1,6 +1,17 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RecordWildCards           #-}
 
+-- |
+-- Module      : Advent.Throttle
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- (Internal) Implement cacheing of API requests.
+
 module Advent.Cache (
     cacheing
   , SaverLoader(..)

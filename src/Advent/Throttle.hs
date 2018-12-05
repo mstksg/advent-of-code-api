@@ -2,6 +2,17 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections   #-}
 
+-- |
+-- Module      : Advent.Throttle
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- (Internal) Implement throttling of API requests.
+
 module Advent.Throttle (
     Throttler
   , newThrottler
