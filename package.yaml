@@ -5,6 +5,7 @@ license:             BSD3
 author:              "Justin Le"
 maintainer:          "justin@jle.im"
 copyright:           "(c) Justin Le 2018"
+tested-with:         GHC >= 8.0 && < 8.8
 
 extra-source-files:
 - README.md
@@ -20,19 +21,19 @@ category:            Web
 description: |
     Haskell bindings for Advent of Code REST API.  Please use responsibly!
 
+    Requires libcurl.
+
 ghc-options:
 - -Wall
 - -Wcompat
 - -Werror=incomplete-patterns
-
-dependencies:
-- base >= 4.7 && < 5
 
 library:
   source-dirs: src
   exposed-modules:
   - Advent
   dependencies:
+  - base >= 4.9 && < 5
   - containers
   - curl
   - directory
@@ -43,25 +44,3 @@ library:
   - text
   - time
   - uri-encode
-
-# executables:
-#   advent-of-code-api-exe:
-#     main:                Main.hs
-#     source-dirs:         app
-#     ghc-options:
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - advent-of-code-api
-
-# tests:
-#   advent-of-code-api-test:
-#     main:                Spec.hs
-#     source-dirs:         test
-#     ghc-options:
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - advent-of-code-api

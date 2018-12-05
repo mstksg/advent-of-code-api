@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE KindSignatures     #-}
 {-# LANGUAGE LambdaCase         #-}
@@ -6,7 +7,6 @@
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
-{-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE TypeInType         #-}
 
 -- |
@@ -32,7 +32,7 @@ module Advent (
   , AoCSettings(..)
   , SubmitRes(..), showSubmitRes
   , runAoC
-  , aocDay
+  , defaultAoCSettings
   -- ** Calendar
   , challengeReleaseTime
   , timeToRelease
@@ -40,6 +40,7 @@ module Advent (
   -- * Utility
   -- ** Day
   , mkDay, mkDay_
+  , aocDay
   -- ** Throttler
   , setAoCThrottleLimit, getAoCThrottleLimit
   -- * Internal
@@ -59,6 +60,7 @@ import           Data.Set             (Set)
 import           Data.Text            (Text)
 import           Data.Time
 import           Data.Typeable
+import           GHC.Generics         (Generic)
 import           Network.Curl
 import           System.Directory
 import           System.FilePath
@@ -92,10 +94,15 @@ data SubmitRes = SubCorrect (Maybe Integer)     -- ^ global rank
                | SubWait
                | SubInvalid
                | SubUnknown
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | An API command.  An @'AoC' a@ an AoC API request that returns
 -- results of type @a@.
+--
+-- A lot of these commands take @'Finite' 25@, which represents a day of
+-- December up to and including Christmas Day (December 25th).  You can
+-- convert an integer day (1 - 25) into a @'Finite' 25@ representing that
+-- day using 'mkDay' or 'mkDay_'.
 data AoC :: Type -> Type where
     -- | Fetch prompts, as HTML.
     --
@@ -123,6 +130,7 @@ data AoC :: Type -> Type where
         -> AoC (Text, SubmitRes)  -- ^ Submission reply (as HTML), and result token
 
 deriving instance Show (AoC a)
+deriving instance Typeable (AoC a)
 
 -- | Get the day associated with a given API command.
 aocDay :: AoC a -> Finite 25
@@ -144,7 +152,7 @@ data AoCError
     -- | The throttler limit is full.  Either make less requests, or adjust
     -- it with 'setAoCThrottleLimit'.
     | AoCThrottleError
-  deriving (Show, Typeable)
+  deriving (Show, Typeable, Generic)
 instance Exception AoCError
 
 -- | Setings for running an API request.
@@ -167,7 +175,19 @@ data AoCSettings = AoCSettings
     , _aCache      :: Maybe FilePath  -- ^ Cache directory
     , _aThrottle   :: Int             -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.
     }
-  deriving Show
+  deriving (Show, Typeable, Generic)
+
+-- | Sensible defaults for 'AoCSettings' for a given year and session key.
+defaultAoCSettings
+    :: Integer
+    -> String
+    -> AoCSettings
+defaultAoCSettings y s = AoCSettings
+    { _aSessionKey = s
+    , _aYear       = y
+    , _aCache      = Nothing
+    , _aThrottle   = 3000000
+    }
 
 -- | API endpoint for a given command.
 apiUrl :: Integer -> AoC a -> FilePath
@@ -230,8 +250,8 @@ runAoC AoCSettings{..} a = do
       rel <- liftIO $ timeToRelease _aYear (aocDay a)
       when (rel > 0) $
         throwError $ AoCReleaseError rel
-      
-      (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<) 
+
+      (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<)
                . liftIO
                . throttling aocThrottler (max 1000000 _aThrottle)
                $ curlGetString u (apiCurl _aSessionKey a)
