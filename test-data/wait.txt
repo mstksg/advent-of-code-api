@@ -1,0 +1,3 @@
+SubWait 136
+You gave an answer too recently; you have to wait after submitting an answer
+before trying again. You have 2m 16s left to wait.

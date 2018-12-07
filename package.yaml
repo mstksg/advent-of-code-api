@@ -10,6 +10,7 @@ tested-with:         GHC >= 8.0 && < 8.8
 extra-source-files:
 - README.md
 - CHANGELOG.md
+- test-data/*.txt
 
 # Metadata used when publishing your package
 synopsis:            Advent of Code REST API bindings
@@ -26,20 +27,35 @@ ghc-options:
 - -Wcompat
 - -Werror=incomplete-patterns
 
+dependencies:
+- base >= 4.9 && < 5
+- text
+- directory
+- filepath
+
 library:
   source-dirs: src
   exposed-modules:
   - Advent
   dependencies:
-  - base >= 4.9 && < 5
+  - attoparsec
   - containers
   - curl
   - deepseq
-  - directory
-  - filepath
   - finite-typelits
   - mtl
   - taggy
-  - text
   - time
   - uri-encode
+
+tests:
+  advent-of-code-api-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - advent-of-code-api
+    - HUnit

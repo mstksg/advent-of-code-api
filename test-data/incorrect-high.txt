@@ -1,0 +1,4 @@
+SubIncorrect 60 (Just "too high")
+That's not the right answer; your answer is too high. If you're stuck, there
+are some general tips on the about page, or you can ask for hints on the
+subreddit. Please wait one minute before trying again. (You guessed 218.)
