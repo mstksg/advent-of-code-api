@@ -281,7 +281,7 @@ apiCache
     -> AoC a
     -> Maybe FilePath
 apiCache sess = \case
-    AoCPrompt d -> Just $ printf "prompt/%02d.yaml"        (dayInt d)
+    AoCPrompt d -> Just $ printf "prompt/%02d.html"        (dayInt d)
     AoCInput  d -> Just $ printf "input/%s%02d.txt" keyDir (dayInt d)
     AoCSubmit{} -> Nothing
   where

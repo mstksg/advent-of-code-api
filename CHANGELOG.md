@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.2.0
+---------------
+
+*Unreleased*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.0>
+
+*   Fixed cache to store prompts at `.html` instead of `.yaml`
+
 Version 0.1.1.0
 ---------------
 
