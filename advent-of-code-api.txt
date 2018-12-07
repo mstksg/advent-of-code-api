@@ -10,7 +10,7 @@
 --   
 --   Requires libcurl.
 @package advent-of-code-api
-@version 0.1.0.0
+@version 0.1.1.0
 
 
 -- | Haskell bindings for Advent of Code 2018 API. Caches and throttles
@@ -125,10 +125,11 @@ data SubmitRes
 --   happens if rank is under 1000)
 SubCorrect :: Maybe Integer -> SubmitRes
 
--- | Incorrect submission. Check response text for hints (often, "too high"
---   or "too low"), and also for the wait time required before the next
---   submission.
-SubIncorrect :: SubmitRes
+-- | Incorrect submission. The <a>Maybe</a> contains possible hints given
+--   by the server (usually "too low" or "too high"). Check response text
+--   for hints that the parser didn't catch, and also for the wait time
+--   required before the next submission.
+SubIncorrect :: Maybe String -> SubmitRes
 
 -- | Submission was rejected because an incorrect submission was recently
 --   submitted. Check response text for wait time.
