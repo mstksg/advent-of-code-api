@@ -117,10 +117,11 @@ data SubmitRes
     -- | Correct submission, including global rank (if reported, which
     -- usually happens if rank is under 1000)
     = SubCorrect (Maybe Integer)
-    -- | Incorrect submission.  Check response text for hints (often, "too
-    -- high" or "too low"), and also for the wait time required before the
-    -- next submission.
-    | SubIncorrect
+    -- | Incorrect submission.  The 'Maybe' contains possible hints given
+    -- by the server (usually "too low" or "too high").  Check response
+    -- text for hints that the parser didn't catch, and also for the wait
+    -- time required before the next submission.
+    | SubIncorrect (Maybe String)
     -- | Submission was rejected because an incorrect submission was
     -- recently submitted.  Check response text for wait time.
     | SubWait
@@ -353,7 +354,9 @@ processHTML = map (TL.toStrict . TL.intercalate "\n" . map H.render)
 parseSubmitRes :: Text -> SubmitRes
 parseSubmitRes t
     | "the right answer!"       `T.isInfixOf` t = SubCorrect $ findRank t
-    | "not the right answer."   `T.isInfixOf` t = SubIncorrect
+    | "too high"                `T.isInfixOf` t = SubIncorrect $ Just "too high"
+    | "too low"                 `T.isInfixOf` t = SubIncorrect $ Just "too low"
+    | "not the right answer"    `T.isInfixOf` t = SubIncorrect Nothing
     | "an answer too recently"  `T.isInfixOf` t = SubWait
     | "solving the right level" `T.isInfixOf` t = SubInvalid
     | otherwise                                 = SubUnknown
@@ -370,12 +373,13 @@ parseSubmitRes t
 -- | Pretty-print a 'SubmitRes'
 showSubmitRes :: SubmitRes -> String
 showSubmitRes = \case
-    SubCorrect Nothing  -> "Correct"
-    SubCorrect (Just r) -> printf "Correct (Rank %d)" r
-    SubIncorrect        -> "Incorrect"
-    SubWait             -> "Wait"
-    SubInvalid          -> "Invalid"
-    SubUnknown          -> "Unknown"
+    SubCorrect Nothing    -> "Correct"
+    SubCorrect (Just r)   -> printf "Correct (Rank %d)" r
+    SubIncorrect Nothing  -> "Incorrect"
+    SubIncorrect (Just h) -> printf "Incorrect (%s)" h
+    SubWait               -> "Wait"
+    SubInvalid            -> "Invalid"
+    SubUnknown            -> "Unknown"
 
 saverLoader :: AoC a -> SaverLoader (Either AoCError a)
 saverLoader = \case
