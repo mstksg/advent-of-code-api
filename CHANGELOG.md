@@ -1,15 +1,17 @@
 Changelog
 =========
 
-Version 0.1.2.1
+Version 0.1.2.X
 ---------------
 
-*December 8, 2018*
-
-<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.1>
-
-*   *BUGFIX* Switched from *taggy* to *tagsoup*, after observing that *taggy*
+*   *December 8, 2018*: *BUGFIX* Switched from *taggy* to *tagsoup*, after observing that *taggy*
     had some issues parsing 2018's Day 8 challenge prompt.
+
+    <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.1>
+
+*   *December 8, 2018*: *BUGFIX* Add CPP to deal with building issues on GHC 8.2
+
+    <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.2>
 
 Version 0.1.2.0
 ---------------

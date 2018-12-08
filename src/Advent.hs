@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE GADTs              #-}
@@ -99,6 +100,10 @@ import qualified Network.URI.Encode     as URI
 import qualified System.IO.Unsafe       as Unsafe
 import qualified Text.HTML.TagSoup      as H
 import qualified Text.HTML.TagSoup.Tree as H
+
+#if !MIN_VERSION_base(4,11,0)
+import           Data.Semigroup ((<>))
+#endif
 
 initialThrottleLimit :: Int
 initialThrottleLimit = 100
