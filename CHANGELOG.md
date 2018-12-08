@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.1.2.1
+---------------
+
+*December 8, 2018*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.1>
+
+*   *BUGFIX* Switched from *taggy* to *tagsoup*, after observing that *taggy*
+    had some issues parsing 2018's Day 8 challenge prompt.
+
 Version 0.1.2.0
 ---------------
 

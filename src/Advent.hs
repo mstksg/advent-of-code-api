@@ -67,6 +67,7 @@ module Advent (
   , setAoCThrottleLimit, getAoCThrottleLimit
   -- * Internal
   , parseSubmitRes
+  , processHTML
   ) where
 
 import           Advent.Cache
@@ -78,26 +79,26 @@ import           Data.Char
 import           Data.Finite
 import           Data.Foldable
 import           Data.Kind
-import           Data.Map             (Map)
+import           Data.Map               (Map)
 import           Data.Maybe
-import           Data.Semigroup
-import           Data.Set             (Set)
-import           Data.Text            (Text)
+import           Data.Set               (Set)
+import           Data.Text              (Text)
 import           Data.Time
 import           Data.Typeable
-import           GHC.Generics         (Generic)
+import           GHC.Generics           (Generic)
 import           Network.Curl
 import           System.Directory
 import           System.FilePath
+import           Text.HTML.TagSoup.Tree (TagTree(..))
 import           Text.Printf
-import qualified Data.Attoparsec.Text as P
-import qualified Data.Map             as M
-import qualified Data.Set             as S
-import qualified Data.Text            as T
-import qualified Data.Text.Lazy       as TL
-import qualified Network.URI.Encode   as URI
-import qualified System.IO.Unsafe     as Unsafe
-import qualified Text.Taggy           as H
+import qualified Data.Attoparsec.Text   as P
+import qualified Data.Map               as M
+import qualified Data.Set               as S
+import qualified Data.Text              as T
+import qualified Network.URI.Encode     as URI
+import qualified System.IO.Unsafe       as Unsafe
+import qualified Text.HTML.TagSoup      as H
+import qualified Text.HTML.TagSoup.Tree as H
 
 initialThrottleLimit :: Int
 initialThrottleLimit = 100
@@ -339,18 +340,16 @@ processAoC = \case
                  . processHTML
 
 -- | Process an HTML webpage into a list of all contents in <article>s
-processHTML :: String -> [T.Text]
-processHTML = map (TL.toStrict . TL.intercalate "\n" . map H.render)
+processHTML :: String -> [Text]
+processHTML = map H.renderTree
             . mapMaybe isArticle
-            . foldMap universe
-            . listToMaybe
-            . H.parseDOM True
-            . TL.pack
+            . H.universeTree
+            . H.parseTree
+            . T.pack
   where
-    isArticle (H.NodeElement H.Element{..})
-        = eltChildren <$ guard (eltName == "article")
-    isArticle _
-        = Nothing
+    isArticle :: TagTree Text -> Maybe [TagTree Text]
+    isArticle (TagBranch n _ ts) = ts <$ guard (n == "article")
+    isArticle _                  = Nothing
 
 -- | Parse 'Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
@@ -358,8 +357,7 @@ parseSubmitRes = either SubUnknown id
                . P.parseOnly choices
                . mconcat
                . mapMaybe deTag
-               . H.taggyWith True
-               . TL.fromStrict
+               . H.parseTags
   where
     deTag (H.TagText t) = Just t
     deTag _             = Nothing
@@ -451,15 +449,6 @@ mkDay_ :: Integer -> Finite 25
 mkDay_ = fromMaybe e . mkDay
   where
     e = errorWithoutStackTrace "Advent.mkDay_: Date out of range (1 - 25)"
-
--- | All nodes within a node.
-universe :: H.Node -> [H.Node]
-universe = ($ []) . appEndo . go
-  where
-    go :: H.Node -> Endo [H.Node]
-    go (H.NodeElement (H.Element{..})) = Endo (eltChildren ++)
-                                      <> foldMap go eltChildren
-    go (H.NodeContent _              ) = mempty
 
 -- | Get time until release of a given challenge.
 timeToRelease
