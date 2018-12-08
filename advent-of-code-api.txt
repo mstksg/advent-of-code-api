@@ -125,23 +125,23 @@ data SubmitRes
 --   happens if rank is under 1000)
 SubCorrect :: Maybe Integer -> SubmitRes
 
--- | Incorrect submission. The <a>Maybe</a> contains possible hints given
---   by the server (usually "too low" or "too high"). Check response text
---   for hints that the parser didn't catch, and also for the wait time
---   required before the next submission.
-SubIncorrect :: Maybe String -> SubmitRes
+-- | Incorrect submission. Contains the number of <i>seconds</i> you must
+--   wait before trying again. The <a>Maybe</a> contains possible hints
+--   given by the server (usually "too low" or "too high").
+SubIncorrect :: Int -> Maybe String -> SubmitRes
 
 -- | Submission was rejected because an incorrect submission was recently
---   submitted. Check response text for wait time.
-SubWait :: SubmitRes
+--   submitted. Contains the number of <i>seconds</i> you must wait before
+--   trying again.
+SubWait :: Int -> SubmitRes
 
 -- | Submission was rejected because it was sent to an invalid question or
 --   part. Usually happens if you submit to a part you have already
 --   answered or have not yet unlocked.
 SubInvalid :: SubmitRes
 
--- | Could not parse server response.
-SubUnknown :: SubmitRes
+-- | Could not parse server response. Contains parse error.
+SubUnknown :: String -> SubmitRes
 
 -- | Pretty-print a <a>SubmitRes</a>
 showSubmitRes :: SubmitRes -> String
@@ -234,6 +234,7 @@ instance GHC.Show.Show Advent.Part
 instance GHC.Generics.Generic Advent.SubmitRes
 instance GHC.Classes.Ord Advent.SubmitRes
 instance GHC.Classes.Eq Advent.SubmitRes
+instance GHC.Read.Read Advent.SubmitRes
 instance GHC.Show.Show Advent.SubmitRes
 instance GHC.Show.Show (Advent.AoC a)
 instance GHC.Exception.Type.Exception Advent.AoCError
