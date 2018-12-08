@@ -4,11 +4,13 @@ Changelog
 Version 0.1.2.0
 ---------------
 
-*Unreleased*
+*December 7, 2018*
 
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.0>
 
 *   Fixed cache to store prompts at `.html` instead of `.yaml`
+*   `SubIncorrect` and `SubWait` now include fields for wait times.
+*   Re-implemented submission result parsers using *attoparsec*
 
 Version 0.1.1.0
 ---------------
