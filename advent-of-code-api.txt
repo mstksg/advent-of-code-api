@@ -10,7 +10,7 @@
 --   
 --   Requires libcurl.
 @package advent-of-code-api
-@version 0.1.2.1
+@version 0.1.2.2
 
 
 -- | Haskell bindings for Advent of Code 2018 API. Caches and throttles
