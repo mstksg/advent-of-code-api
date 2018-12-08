@@ -1,0 +1,2 @@
+SubInvalid
+<p>You don&#39;t seem to be solving the right level.  Did you already complete it? <a href="/2016/day/1">[Return to Day 1]</a></p>

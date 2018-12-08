@@ -71,31 +71,33 @@ module Advent (
 
 import           Advent.Cache
 import           Advent.Throttle
+import           Control.Applicative
 import           Control.Exception
 import           Control.Monad.Except
 import           Data.Char
 import           Data.Finite
+import           Data.Foldable
 import           Data.Kind
-import           Data.Map              (Map)
+import           Data.Map             (Map)
 import           Data.Maybe
 import           Data.Semigroup
-import           Data.Set              (Set)
-import           Data.Text             (Text)
+import           Data.Set             (Set)
+import           Data.Text            (Text)
 import           Data.Time
 import           Data.Typeable
-import           GHC.Generics          (Generic)
+import           GHC.Generics         (Generic)
 import           Network.Curl
 import           System.Directory
 import           System.FilePath
 import           Text.Printf
-import           Text.Read             (readMaybe)
-import qualified Data.Map              as M
-import qualified Data.Set              as S
-import qualified Data.Text             as T
-import qualified Data.Text.Lazy        as TL
-import qualified Network.URI.Encode    as URI
-import qualified System.IO.Unsafe      as Unsafe
-import qualified Text.Taggy            as H
+import qualified Data.Attoparsec.Text as P
+import qualified Data.Map             as M
+import qualified Data.Set             as S
+import qualified Data.Text            as T
+import qualified Data.Text.Lazy       as TL
+import qualified Network.URI.Encode   as URI
+import qualified System.IO.Unsafe     as Unsafe
+import qualified Text.Taggy           as H
 
 initialThrottleLimit :: Int
 initialThrottleLimit = 100
@@ -117,21 +119,21 @@ data SubmitRes
     -- | Correct submission, including global rank (if reported, which
     -- usually happens if rank is under 1000)
     = SubCorrect (Maybe Integer)
-    -- | Incorrect submission.  The 'Maybe' contains possible hints given
-    -- by the server (usually "too low" or "too high").  Check response
-    -- text for hints that the parser didn't catch, and also for the wait
-    -- time required before the next submission.
-    | SubIncorrect (Maybe String)
+    -- | Incorrect submission.  Contains the number of /seconds/ you must
+    -- wait before trying again.  The 'Maybe' contains possible hints given
+    -- by the server (usually "too low" or "too high").
+    | SubIncorrect Int (Maybe String)
     -- | Submission was rejected because an incorrect submission was
-    -- recently submitted.  Check response text for wait time.
-    | SubWait
+    -- recently submitted.  Contains the number of /seconds/ you must wait
+    -- before trying again.
+    | SubWait Int
     -- | Submission was rejected because it was sent to an invalid question
     -- or part.  Usually happens if you submit to a part you have already
     -- answered or have not yet unlocked.
     | SubInvalid
-    -- | Could not parse server response.
-    | SubUnknown
-  deriving (Show, Eq, Ord, Typeable, Generic)
+    -- | Could not parse server response.  Contains parse error.
+    | SubUnknown String
+  deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
 -- | A given part of a problem.  All Advent of Code challenges are
 -- two-parts.
@@ -345,41 +347,62 @@ processHTML = map (TL.toStrict . TL.intercalate "\n" . map H.render)
             . H.parseDOM True
             . TL.pack
   where
-    isArticle (H.NodeElement (H.Element{..}))
+    isArticle (H.NodeElement H.Element{..})
         = eltChildren <$ guard (eltName == "article")
     isArticle _
         = Nothing
 
 -- | Parse 'Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
-parseSubmitRes t
-    | "the right answer!"       `T.isInfixOf` t = SubCorrect $ findRank t
-    | "too high"                `T.isInfixOf` t = SubIncorrect $ Just "too high"
-    | "too low"                 `T.isInfixOf` t = SubIncorrect $ Just "too low"
-    | "not the right answer"    `T.isInfixOf` t = SubIncorrect Nothing
-    | "an answer too recently"  `T.isInfixOf` t = SubWait
-    | "solving the right level" `T.isInfixOf` t = SubInvalid
-    | otherwise                                 = SubUnknown
+parseSubmitRes = either SubUnknown id
+               . P.parseOnly choices
+               . mconcat
+               . mapMaybe deTag
+               . H.taggyWith True
+               . TL.fromStrict
   where
-    findRank = go . T.words . T.map onlyAlphaNum . T.toLower
-      where
-        go ("rank":n:_) = readMaybe $ T.unpack n
-        go (_     :ws ) = go ws
-        go []           = Nothing
-        onlyAlphaNum c
-          | isAlphaNum c = c
-          | otherwise    = ' '
+    deTag (H.TagText t) = Just t
+    deTag _             = Nothing
+    choices             = asum [ parseCorrect   P.<?> "Correct"
+                               , parseIncorrect P.<?> "Incorrect"
+                               , parseWait      P.<?> "Wait"
+                               , parseInvalid   P.<?> "Invalid"
+                               ]
+    parseCorrect = do
+      _ <- P.manyTill P.anyChar (P.asciiCI "that's the right answer") P.<?> "Right answer"
+      r <- optional . (P.<?> "Rank") $ do
+        P.manyTill P.anyChar (P.asciiCI "rank")
+          *> P.skipMany (P.satisfy (not . isDigit))
+        P.decimal
+      pure $ SubCorrect r
+    parseIncorrect = do
+      _ <- P.manyTill P.anyChar (P.asciiCI "that's not the right answer") P.<?> "Not the right answer"
+      hint <- optional . (P.<?> "Hint") $ do
+        P.manyTill P.anyChar "your answer is" *> P.skipSpace
+        P.takeWhile1 (/= '.')
+      P.manyTill P.anyChar (P.asciiCI "wait") *> P.skipSpace
+      waitAmt <- (1 <$ P.asciiCI "one") <|> P.decimal
+      pure $ SubIncorrect (waitAmt * 60) (T.unpack <$> hint)
+    parseWait = do
+      _ <- P.manyTill P.anyChar (P.asciiCI "an answer too recently") P.<?> "An answer too recently"
+      P.skipMany (P.satisfy (not . isDigit))
+      m <- optional . (P.<?> "Delay minutes") $
+              P.decimal <* P.char 'm' <* P.skipSpace
+      s <- P.decimal <* P.char 's' P.<?> "Delay seconds"
+      pure . SubWait $ maybe 0 (* 60) m + s
+    parseInvalid = SubInvalid <$ P.manyTill P.anyChar (P.asciiCI "solving the right level")
 
 -- | Pretty-print a 'SubmitRes'
 showSubmitRes :: SubmitRes -> String
 showSubmitRes = \case
     SubCorrect Nothing    -> "Correct"
     SubCorrect (Just r)   -> printf "Correct (Rank %d)" r
-    SubIncorrect Nothing  -> "Incorrect"
-    SubIncorrect (Just h) -> printf "Incorrect (%s)" h
-    SubWait               -> "Wait"
+    SubIncorrect i Nothing  -> printf "Incorrect (%d minute wait)" (i `div` 60)
+    SubIncorrect i (Just h) -> printf "Incorrect (%s) (%d minute wait)" h (i `div` 60)
+    SubWait i             -> let (m,s) = i `divMod` 60
+                             in   printf "Wait (%d min %d sec wait)"  m s
     SubInvalid            -> "Invalid"
-    SubUnknown            -> "Unknown"
+    SubUnknown r          -> printf "Unknown (%s)" r
 
 saverLoader :: AoC a -> SaverLoader (Either AoCError a)
 saverLoader = \case
