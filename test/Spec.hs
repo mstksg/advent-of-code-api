@@ -3,7 +3,6 @@
 import           Advent
 import           Control.Monad
 import           Data.List
-import           Data.Maybe
 import           System.Directory
 import           System.Exit
 import           System.FilePath

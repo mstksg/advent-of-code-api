@@ -1,4 +1,7 @@
 SubIncorrect 60 Nothing
-That's not the right answer. If you're stuck, there are some general tips on
-the about page, or you can ask for hints on the subreddit.  Please wait one
-minute before trying again. (You guessed HFAIGNRXMYBLUCDPEQKJSWTVZ.)
+<p>That&#39;s not the right answer.  If you&#39;re stuck, there are some
+general tips on the <a href="/2016/about">about page</a>, or you can ask for
+hints on the <a href="https://www.reddit.com/r/adventofcode/"
+target="_blank">subreddit</a>.  Please wait one minute before trying again.
+(You guessed <span style="white-space:nowrap;"><code>hello</code>.)</span><a
+href="/2016/day/2">[Return to Day 2]</a></p>
