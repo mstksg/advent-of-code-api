@@ -1,3 +1,2 @@
-SubCorrect (Just 259)
-That's the right answer! You are one gold star closer to fixing the time
-stream. You got rank 259 on this star's leaderboard.
+SubCorrect (Just 98)
+<p>That&#39;s the right answer!  You are <span class="day-success">one gold star</span> closer to fixing the time stream. You achieved <em>rank 98</em> on <a href="/2018/leaderboard/day/8">this star&#39;s leaderboard</a> and gained <em>3 points</em>! <a href="/2018/day/8#part2">[Continue to Part Two]</a></p>
