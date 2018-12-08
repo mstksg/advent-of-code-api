@@ -10,7 +10,7 @@
 --   
 --   Requires libcurl.
 @package advent-of-code-api
-@version 0.1.2.0
+@version 0.1.2.1
 
 
 -- | Haskell bindings for Advent of Code 2018 API. Caches and throttles
@@ -220,6 +220,9 @@ getAoCThrottleLimit :: IO Int
 
 -- | Parse <a>Text</a> into a <a>SubmitRes</a>.
 parseSubmitRes :: Text -> SubmitRes
+
+-- | Process an HTML webpage into a list of all contents in <a>article</a>s
+processHTML :: String -> [Text]
 instance GHC.Generics.Generic Advent.AoCOpts
 instance GHC.Show.Show Advent.AoCOpts
 instance GHC.Generics.Generic Advent.AoCError
