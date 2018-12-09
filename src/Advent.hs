@@ -286,11 +286,12 @@ apiCurl sess = \case
 -- | Cache file for a given 'AoC' command
 apiCache
     :: Maybe String           -- ^ session key
+    -> Integer                -- ^ year
     -> AoC a
     -> Maybe FilePath
-apiCache sess = \case
-    AoCPrompt d -> Just $ printf "prompt/%02d.html"        (dayInt d)
-    AoCInput  d -> Just $ printf "input/%s%02d.txt" keyDir (dayInt d)
+apiCache sess yr = \case
+    AoCPrompt d -> Just $ printf "prompt/%04d/%02d.html"        yr (dayInt d)
+    AoCInput  d -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
     AoCSubmit{} -> Nothing
   where
     keyDir = case sess of
@@ -309,7 +310,7 @@ runAoC AoCOpts{..} a = do
       Just c  -> pure (Nothing, c)
       Nothing -> (Just _aSessionKey,) . (</> "advent-of-code-api") <$> getTemporaryDirectory
 
-    let cacher = case apiCache keyMayb a of
+    let cacher = case apiCache keyMayb _aYear a of
           Nothing -> id
           Just fp -> cacheing (cacheDir </> fp) $
                        if _aForce

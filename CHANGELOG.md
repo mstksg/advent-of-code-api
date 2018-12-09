@@ -13,6 +13,10 @@ Version 0.1.2.X
 
     <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.2>
 
+*   *December 8, 2018*: *BUGFIX* Fix cache directory to separate by year
+
+    <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.1.2.3>
+
 Version 0.1.2.0
 ---------------
 
