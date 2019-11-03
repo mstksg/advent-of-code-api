@@ -39,24 +39,24 @@ library:
   - Advent.Throttle
   - Advent.Cache
   dependencies:
-  - http-client
   - aeson
-  - stm
-  - http-media
-  - bytestring
   - attoparsec
+  - bytestring
   - containers
-  - http-client-tls
-  - cookie
   - curl
   - deepseq
   - finite-typelits
+  - http-api-data
+  - http-client
+  - http-client-tls
+  - http-media
   - mtl
   - servant
   - servant-client
+  - servant-client-core
+  - stm
   - tagsoup
   - time
-  - uri-encode
 
 tests:
   advent-of-code-api-test:

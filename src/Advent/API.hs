@@ -48,6 +48,7 @@ import qualified Data.Text.Encoding     as T
 import qualified Network.HTTP.Media     as M
 import qualified Text.HTML.TagSoup      as H
 import qualified Text.HTML.TagSoup.Tree as H
+import qualified Web.FormUrlEncoded     as WF
 
 -- | Describes the day: a number between 1 and 25 inclusive.
 --
@@ -96,18 +97,17 @@ data SubmitRes
     | SubUnknown String
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
+instance ToHttpApiData Part where
+    toUrlPiece = T.pack . show . partInt
+    toQueryParam = toUrlPiece
 
 instance ToHttpApiData Day where
     toUrlPiece = T.pack . show . dayInt
     toQueryParam = toUrlPiece
 
-instance ToJSON Part where
-    toJSON = Number . fromIntegral . partInt
-
-instance ToJSON SubmitInfo where
-    toEncoding = genericToEncoding defaultOptions
-      { fieldLabelModifier = camelTo2 '-' . drop 2
-      }
+instance WF.ToForm SubmitInfo where
+    toForm = WF.genericToForm WF.FormOptions
+      { WF.fieldLabelModifier = camelTo2 '-' . drop 2 }
 
 data RawText
 
@@ -152,7 +152,7 @@ type AdventAPI = Capture "year" Integer
               :> (Get '[Articles] (Map Part Text)
              :<|> "input" :> Get '[RawText] Text
              :<|> "answer"
-                      :> ReqBody '[JSON] SubmitInfo
+                      :> ReqBody '[FormUrlEncoded] SubmitInfo
                       :> Post    '[Articles] (Text :<|> SubmitRes)
                  )
 
@@ -190,6 +190,7 @@ parseSubmitRes = either SubUnknown id
                                , parseIncorrect P.<?> "Incorrect"
                                , parseWait      P.<?> "Wait"
                                , parseInvalid   P.<?> "Invalid"
+                               , fail "No option recognized"
                                ]
     parseCorrect = do
       _ <- P.manyTill P.anyChar (P.asciiCI "that's the right answer") P.<?> "Right answer"

@@ -41,6 +41,9 @@ packages:
 extra-deps: []
 # - taggy-0.2.1
 
+ghc-options:
+  "$locals": -ddump-to-file -ddump-hi
+
 # Override default flag values for local packages and extra-deps
 # flags: {}
 
