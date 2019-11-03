@@ -71,6 +71,9 @@ module Advent (
   , processHTML
   ) where
 
+-- import           Network.HTTP.Client
+-- import qualified Network.URI.Encode   as URI
+import           Advent.API
 import           Advent.Cache
 import           Advent.Throttle
 import           Control.Applicative
@@ -80,26 +83,28 @@ import           Data.Char
 import           Data.Finite
 import           Data.Foldable
 import           Data.Kind
-import           Data.Map               (Map)
+import           Data.Map                (Map)
 import           Data.Maybe
-import           Data.Set               (Set)
-import           Data.Text              (Text)
+import           Data.Set                (Set)
+import           Data.Text               (Text)
 import           Data.Time
 import           Data.Typeable
-import           GHC.Generics           (Generic)
+import           GHC.Generics            (Generic)
 import           Network.Curl
+import           Network.HTTP.Client.TLS
+import           Servant.API
+import           Servant.Client
 import           System.Directory
 import           System.FilePath
-import           Text.HTML.TagSoup.Tree (TagTree(..))
+import           Text.HTML.TagSoup.Tree  (TagTree(..))
 import           Text.Printf
-import qualified Data.Attoparsec.Text   as P
-import qualified Data.Map               as M
-import qualified Data.Set               as S
-import qualified Data.Text              as T
-import qualified Network.URI.Encode     as URI
-import qualified System.IO.Unsafe       as Unsafe
-import qualified Text.HTML.TagSoup      as H
-import qualified Text.HTML.TagSoup.Tree as H
+import qualified Data.Attoparsec.Text    as P
+import qualified Data.Map                as M
+import qualified Data.Set                as S
+import qualified Data.Text               as T
+import qualified System.IO.Unsafe        as Unsafe
+import qualified Text.HTML.TagSoup       as H
+import qualified Text.HTML.TagSoup.Tree  as H
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))
@@ -140,16 +145,6 @@ data SubmitRes
     -- | Could not parse server response.  Contains parse error.
     | SubUnknown String
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
-
--- | A given part of a problem.  All Advent of Code challenges are
--- two-parts.
---
--- You can usually get 'Part1' (if it is already released) with a nonsense
--- session key, but 'Part2' always requires a valid session key.
---
--- Note also that Challenge #25 typically only has a single part.
-data Part = Part1 | Part2
-  deriving (Show, Read, Eq, Ord, Enum, Bounded, Typeable, Generic)
 
 -- | An API command.  An @'AoC' a@ an AoC API request that returns
 -- results of type @a@.
@@ -195,6 +190,8 @@ aocDay (AoCSubmit d _ _) = d
 data AoCError
     -- | A libcurl error, with response code and response body
     = AoCCurlError CurlCode String
+    -- | An error in the http request itself
+    | AoCClientError ClientError
     -- | Tried to interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime
@@ -257,31 +254,41 @@ defaultAoCOpts y s = AoCOpts
     , _aCurlOpts   = []
     }
 
--- | API endpoint for a given command.
-apiUrl :: Integer -> AoC a -> FilePath
-apiUrl y = \case
-    AoCPrompt i     -> printf "https://adventofcode.com/%04d/day/%d"        y (dayInt i)
-    AoCInput  i     -> printf "https://adventofcode.com/%04d/day/%d/input"  y (dayInt i)
-    AoCSubmit i _ _ -> printf "https://adventofcode.com/%04d/day/%d/answer" y (dayInt i)
+-- -- | API endpoint for a given command.
+-- apiUrl :: Integer -> AoC a -> FilePath
+-- apiUrl y = \case
+--     AoCPrompt i     -> printf "https://adventofcode.com/%04d/day/%d"        y (dayInt i)
+--     AoCInput  i     -> printf "https://adventofcode.com/%04d/day/%d/input"  y (dayInt i)
+--     AoCSubmit i _ _ -> printf "https://adventofcode.com/%04d/day/%d/answer" y (dayInt i)
 
--- | Create a cookie option from a session key.
-sessionKeyCookie :: String -> CurlOption
-sessionKeyCookie = CurlCookie . printf "session=%s"
+-- -- | Create a cookie option from a session key.
+-- sessionKeyCookie :: String -> CurlOption
+-- sessionKeyCookie = CurlCookie . printf "session=%s"
 
-apiCurl :: String -> AoC a -> [CurlOption]
-apiCurl sess = \case
-    AoCPrompt _       -> sessionKeyCookie sess
-                       : method_GET
-    AoCInput  _       -> sessionKeyCookie sess
-                       : method_GET
-    AoCSubmit _ p ans -> sessionKeyCookie sess
-                       : CurlPostFields [ printf "level=%d"  (partInt p)
-                                        , printf "answer=%s" (enc ans  )
-                                        ]
-                       : CurlHttpHeaders ["Content-Type: application/x-www-form-urlencoded"]
-                       : method_POST
-  where
-    enc = URI.encode . strip
+aocBase :: BaseUrl
+aocBase = BaseUrl Https "adventofcode.com" 80 ""
+
+apiReq :: String -> Integer -> AoC a -> ClientM Text
+apiReq sess y = \case
+    AoCPrompt i       -> let r :<|> _        = adventAPIClient (Just (Session sess)) y (Day i) in r
+    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient (Just (Session sess)) y (Day i) in r
+    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient (Just (Session sess)) y (Day i)
+                         in  r (SubmitInfo p ans)
+
+-- apiCurl :: String -> AoC a -> [CurlOption]
+-- apiCurl sess = \case
+--     AoCPrompt _       -> sessionKeyCookie sess
+--                        : method_GET
+--     AoCInput  _       -> sessionKeyCookie sess
+--                        : method_GET
+--     AoCSubmit _ p ans -> sessionKeyCookie sess
+--                        : CurlPostFields [ printf "level=%d"  (partInt p)
+--                                         , printf "answer=%s" (enc ans  )
+--                                         ]
+--                        : CurlHttpHeaders ["Content-Type: application/x-www-form-urlencoded"]
+--                        : method_POST
+--   where
+--     enc = URI.encode . strip
 
 -- | Cache file for a given 'AoC' command
 apiCache
@@ -317,21 +324,22 @@ runAoC AoCOpts{..} a = do
                          then noCache
                          else saverLoader a
 
+    mgr <- newTlsManager
     cacher . withCurlDo . runExceptT $ do
       rel <- liftIO $ timeToRelease _aYear (aocDay a)
       when (rel > 0) $
         throwError $ AoCReleaseError rel
 
-      (cc, r) <- (maybe (throwError AoCThrottleError) pure =<<)
-               . liftIO
-               . throttling aocThrottler (max 1000000 _aThrottle)
-               $ curlGetString u (apiCurl _aSessionKey a ++ _aCurlOpts)
-      case cc of
-        CurlOK -> return ()
-        _      -> throwError $ AoCCurlError cc r
+      r <- fmap T.unpack
+         . (either (throwError . AoCClientError) pure =<<)
+         . (maybe  (throwError AoCThrottleError) pure =<<)
+         . liftIO
+         . throttling aocThrottler (max 1000000 _aThrottle)
+         $ runClientM
+             (apiReq _aSessionKey _aYear a)
+             (mkClientEnv mgr aocBase)
+
       pure $ processAoC a r
-  where
-    u = apiUrl _aYear a
 
 -- | Process a string response into the type desired.
 processAoC :: AoC a -> String -> a

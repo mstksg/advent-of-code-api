@@ -38,12 +38,18 @@ library:
   exposed-modules:
   - Advent
   dependencies:
+  - http-client
+  - aeson
   - attoparsec
   - containers
+  - http-client-tls
+  - cookie
   - curl
   - deepseq
   - finite-typelits
   - mtl
+  - servant
+  - servant-client
   - tagsoup
   - time
   - uri-encode
