@@ -1,40 +1,53 @@
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
 
 module Advent.API (
     Day(..)
   , Part(..)
   , SubmitInfo(..)
+  , SubmitRes(..), showSubmitRes
   , AdventAPI
   , adventAPI
   , adventAPIClient
   , mkDay, mkDay_, dayInt
   , partInt
   , partChar
+  , processHTML
+  , parseSubmitRes
   ) where
 
+import           Control.Applicative
+import           Control.Monad
 import           Data.Aeson
 import           Data.Bifunctor
+import           Data.Char
 import           Data.Finite
+import           Data.Foldable
 import           Data.Functor.Classes
+import           Data.Map               (Map)
 import           Data.Maybe
 import           Data.Proxy
-import           Data.Text            (Text)
+import           Data.Text              (Text)
 import           Data.Typeable
 import           GHC.Generics
 import           Servant.API
 import           Servant.Client
+import           Text.HTML.TagSoup.Tree (TagTree(..))
 import           Text.Printf
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Text            as T
-import qualified Data.Text.Encoding   as T
-import qualified Network.HTTP.Media   as M
+import qualified Data.Attoparsec.Text   as P
+import qualified Data.ByteString.Lazy   as BSL
+import qualified Data.Map               as M
+import qualified Data.Text              as T
+import qualified Data.Text.Encoding     as T
+import qualified Network.HTTP.Media     as M
+import qualified Text.HTML.TagSoup      as H
+import qualified Text.HTML.TagSoup.Tree as H
 
 -- | Describes the day: a number between 1 and 25 inclusive.
 --
@@ -62,6 +75,28 @@ data SubmitInfo = SubmitInfo
     }
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
+-- | The result of a submission.
+data SubmitRes
+    -- | Correct submission, including global rank (if reported, which
+    -- usually happens if rank is under 1000)
+    = SubCorrect (Maybe Integer)
+    -- | Incorrect submission.  Contains the number of /seconds/ you must
+    -- wait before trying again.  The 'Maybe' contains possible hints given
+    -- by the server (usually "too low" or "too high").
+    | SubIncorrect Int (Maybe String)
+    -- | Submission was rejected because an incorrect submission was
+    -- recently submitted.  Contains the number of /seconds/ you must wait
+    -- before trying again.
+    | SubWait Int
+    -- | Submission was rejected because it was sent to an invalid question
+    -- or part.  Usually happens if you submit to a part you have already
+    -- answered or have not yet unlocked.
+    | SubInvalid
+    -- | Could not parse server response.  Contains parse error.
+    | SubUnknown String
+  deriving (Show, Read, Eq, Ord, Typeable, Generic)
+
+
 instance ToHttpApiData Day where
     toUrlPiece = T.pack . show . dayInt
     toQueryParam = toUrlPiece
@@ -82,14 +117,43 @@ instance Accept RawText where
 instance MimeUnrender RawText Text where
     mimeUnrender _ = first show . T.decodeUtf8' . BSL.toStrict
 
+data Articles
+
+class FromArticles a where
+    fromArticles :: [Text] -> a
+
+instance Accept Articles where
+    contentType _ = "text" M.// "html"
+
+instance FromArticles a => MimeUnrender Articles a where
+    mimeUnrender _ = fmap fromArticles
+                   . bimap show processHTML
+                   . T.decodeUtf8'
+                   . BSL.toStrict
+
+instance FromArticles [Text] where
+    fromArticles = id
+
+instance FromArticles Text where
+    fromArticles = T.unlines
+
+instance (Ord a, Enum a, Bounded a) => FromArticles (Map a Text) where
+    fromArticles = M.fromList . zip [minBound ..]
+
+instance (FromArticles a, FromArticles b) => FromArticles (a :<|> b) where
+    fromArticles xs = fromArticles xs :<|> fromArticles xs
+
+instance FromArticles SubmitRes where
+    fromArticles = parseSubmitRes . fold  . listToMaybe
+
 type AdventAPI = Capture "year" Integer
               :> "day"
               :> Capture "day" Day
-              :> (Get '[PlainText] Text
+              :> (Get '[Articles] (Map Part Text)
              :<|> "input" :> Get '[RawText] Text
              :<|> "answer"
                       :> ReqBody '[JSON] SubmitInfo
-                      :> Post    '[PlainText] Text
+                      :> Post    '[Articles] (Text :<|> SubmitRes)
                  )
 
 adventAPI :: Proxy AdventAPI
@@ -98,8 +162,70 @@ adventAPI = Proxy
 adventAPIClient
     :: Integer
     -> Day
-    -> ClientM Text :<|> ClientM Text :<|> (SubmitInfo -> ClientM Text)
+    -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes))
 adventAPIClient = client adventAPI
+
+-- | Process an HTML webpage into a list of all contents in <article>s
+processHTML :: Text -> [Text]
+processHTML = map H.renderTree
+            . mapMaybe isArticle
+            . H.universeTree
+            . H.parseTree
+  where
+    isArticle :: TagTree Text -> Maybe [TagTree Text]
+    isArticle (TagBranch n _ ts) = ts <$ guard (n == "article")
+    isArticle _                  = Nothing
+
+-- | Parse 'Text' into a 'SubmitRes'.
+parseSubmitRes :: Text -> SubmitRes
+parseSubmitRes = either SubUnknown id
+               . P.parseOnly choices
+               . mconcat
+               . mapMaybe deTag
+               . H.parseTags
+  where
+    deTag (H.TagText t) = Just t
+    deTag _             = Nothing
+    choices             = asum [ parseCorrect   P.<?> "Correct"
+                               , parseIncorrect P.<?> "Incorrect"
+                               , parseWait      P.<?> "Wait"
+                               , parseInvalid   P.<?> "Invalid"
+                               ]
+    parseCorrect = do
+      _ <- P.manyTill P.anyChar (P.asciiCI "that's the right answer") P.<?> "Right answer"
+      r <- optional . (P.<?> "Rank") $ do
+        P.manyTill P.anyChar (P.asciiCI "rank")
+          *> P.skipMany (P.satisfy (not . isDigit))
+        P.decimal
+      pure $ SubCorrect r
+    parseIncorrect = do
+      _ <- P.manyTill P.anyChar (P.asciiCI "that's not the right answer") P.<?> "Not the right answer"
+      hint <- optional . (P.<?> "Hint") $ do
+        P.manyTill P.anyChar "your answer is" *> P.skipSpace
+        P.takeWhile1 (/= '.')
+      P.manyTill P.anyChar (P.asciiCI "wait") *> P.skipSpace
+      waitAmt <- (1 <$ P.asciiCI "one") <|> P.decimal
+      pure $ SubIncorrect (waitAmt * 60) (T.unpack <$> hint)
+    parseWait = do
+      _ <- P.manyTill P.anyChar (P.asciiCI "an answer too recently") P.<?> "An answer too recently"
+      P.skipMany (P.satisfy (not . isDigit))
+      m <- optional . (P.<?> "Delay minutes") $
+              P.decimal <* P.char 'm' <* P.skipSpace
+      s <- P.decimal <* P.char 's' P.<?> "Delay seconds"
+      pure . SubWait $ maybe 0 (* 60) m + s
+    parseInvalid = SubInvalid <$ P.manyTill P.anyChar (P.asciiCI "solving the right level")
+
+-- | Pretty-print a 'SubmitRes'
+showSubmitRes :: SubmitRes -> String
+showSubmitRes = \case
+    SubCorrect Nothing    -> "Correct"
+    SubCorrect (Just r)   -> printf "Correct (Rank %d)" r
+    SubIncorrect i Nothing  -> printf "Incorrect (%d minute wait)" (i `div` 60)
+    SubIncorrect i (Just h) -> printf "Incorrect (%s) (%d minute wait)" h (i `div` 60)
+    SubWait i             -> let (m,s) = i `divMod` 60
+                             in   printf "Wait (%d min %d sec wait)"  m s
+    SubInvalid            -> "Invalid"
+    SubUnknown r          -> printf "Unknown (%s)" r
 
 -- | Convert a @'Finite' 25@ day into a day integer (1 - 25).  Inverse of
 -- 'mkDay'.

@@ -67,22 +67,16 @@ module Advent (
   -- ** Throttler
   , setAoCThrottleLimit, getAoCThrottleLimit
   -- * Internal
-  , parseSubmitRes
-  , processHTML
   , aocBase
   ) where
 
--- import qualified Network.URI.Encode   as URI
 import           Advent.API
 import           Advent.Cache
 import           Advent.Throttle
-import           Control.Applicative
 import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad.Except
-import           Data.Char
-import           Data.Finite
-import           Data.Foldable
+import           Data.Functor
 import           Data.Kind
 import           Data.Map                (Map)
 import           Data.Maybe
@@ -98,17 +92,12 @@ import           Servant.API
 import           Servant.Client
 import           System.Directory
 import           System.FilePath
-import           Text.HTML.TagSoup.Tree  (TagTree(..))
 import           Text.Printf
-import           Web.Cookie
-import qualified Data.Attoparsec.Text    as P
 import qualified Data.Map                as M
 import qualified Data.Set                as S
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified System.IO.Unsafe        as Unsafe
-import qualified Text.HTML.TagSoup       as H
-import qualified Text.HTML.TagSoup.Tree  as H
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))
@@ -128,27 +117,6 @@ setAoCThrottleLimit = setLimit aocThrottler
 -- | Get the internal throttler maximum queue capacity.
 getAoCThrottleLimit :: IO Int
 getAoCThrottleLimit = getLimit aocThrottler
-
--- | The result of a submission.
-data SubmitRes
-    -- | Correct submission, including global rank (if reported, which
-    -- usually happens if rank is under 1000)
-    = SubCorrect (Maybe Integer)
-    -- | Incorrect submission.  Contains the number of /seconds/ you must
-    -- wait before trying again.  The 'Maybe' contains possible hints given
-    -- by the server (usually "too low" or "too high").
-    | SubIncorrect Int (Maybe String)
-    -- | Submission was rejected because an incorrect submission was
-    -- recently submitted.  Contains the number of /seconds/ you must wait
-    -- before trying again.
-    | SubWait Int
-    -- | Submission was rejected because it was sent to an invalid question
-    -- or part.  Usually happens if you submit to a part you have already
-    -- answered or have not yet unlocked.
-    | SubInvalid
-    -- | Could not parse server response.  Contains parse error.
-    | SubUnknown String
-  deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
 -- | An API command.  An @'AoC' a@ an AoC API request that returns
 -- results of type @a@.
@@ -261,12 +229,12 @@ defaultAoCOpts y s = AoCOpts
 aocBase :: BaseUrl
 aocBase = BaseUrl Https "adventofcode.com" 443 ""
 
-apiReq :: Integer -> AoC a -> ClientM Text
-apiReq y = \case
-    AoCPrompt i       -> let r :<|> _        = adventAPIClient y i in r
-    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient y i in r
-    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient y i
-                         in  r (SubmitInfo p ans)
+apiReq :: Integer -> AoC a -> ClientM a
+apiReq yr = \case
+    AoCPrompt i       -> let r :<|> _        = adventAPIClient yr i in r
+    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient yr i in r
+    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient yr i
+                         in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
 
 -- | Cache file for a given 'AoC' command
 apiCache
@@ -307,13 +275,11 @@ runAoC AoCOpts{..} a = do
       when (rel > 0) $
         throwError $ AoCReleaseError rel
 
-      r <- fmap T.unpack
-         . (either (throwError . AoCClientError) pure =<<)
-         . (maybe  (throwError AoCThrottleError) pure =<<)
-         . liftIO
-         . throttling aocThrottler (max 1000000 _aThrottle)
-         $ runClientM (apiReq _aYear a) =<< aocClientEnv _aSessionKey
-      pure $ processAoC a r
+      mtr <- liftIO
+           . throttling aocThrottler (max 1000000 _aThrottle)
+           $ runClientM (apiReq _aYear a) =<< aocClientEnv _aSessionKey
+      mcr <- maybe (throwError AoCThrottleError) pure mtr
+      either (throwError . AoCClientError) pure mcr
 
 aocClientEnv :: String -> IO ClientEnv
 aocClientEnv s = do
@@ -337,81 +303,6 @@ aocClientEnv s = do
       }
     oneYear = 60 * 60 * 24 * 356.25
 
-
--- | Process a string response into the type desired.
-processAoC :: AoC a -> String -> a
-processAoC = \case
-    AoCPrompt _ -> M.fromList
-                 . zip [Part1 ..]
-                 . processHTML
-    AoCInput{}  -> T.pack
-    AoCSubmit{} -> (\o -> (o, parseSubmitRes o))
-                 . fromMaybe ""
-                 . listToMaybe
-                 . processHTML
-
--- | Process an HTML webpage into a list of all contents in <article>s
-processHTML :: String -> [Text]
-processHTML = map H.renderTree
-            . mapMaybe isArticle
-            . H.universeTree
-            . H.parseTree
-            . T.pack
-  where
-    isArticle :: TagTree Text -> Maybe [TagTree Text]
-    isArticle (TagBranch n _ ts) = ts <$ guard (n == "article")
-    isArticle _                  = Nothing
-
--- | Parse 'Text' into a 'SubmitRes'.
-parseSubmitRes :: Text -> SubmitRes
-parseSubmitRes = either SubUnknown id
-               . P.parseOnly choices
-               . mconcat
-               . mapMaybe deTag
-               . H.parseTags
-  where
-    deTag (H.TagText t) = Just t
-    deTag _             = Nothing
-    choices             = asum [ parseCorrect   P.<?> "Correct"
-                               , parseIncorrect P.<?> "Incorrect"
-                               , parseWait      P.<?> "Wait"
-                               , parseInvalid   P.<?> "Invalid"
-                               ]
-    parseCorrect = do
-      _ <- P.manyTill P.anyChar (P.asciiCI "that's the right answer") P.<?> "Right answer"
-      r <- optional . (P.<?> "Rank") $ do
-        P.manyTill P.anyChar (P.asciiCI "rank")
-          *> P.skipMany (P.satisfy (not . isDigit))
-        P.decimal
-      pure $ SubCorrect r
-    parseIncorrect = do
-      _ <- P.manyTill P.anyChar (P.asciiCI "that's not the right answer") P.<?> "Not the right answer"
-      hint <- optional . (P.<?> "Hint") $ do
-        P.manyTill P.anyChar "your answer is" *> P.skipSpace
-        P.takeWhile1 (/= '.')
-      P.manyTill P.anyChar (P.asciiCI "wait") *> P.skipSpace
-      waitAmt <- (1 <$ P.asciiCI "one") <|> P.decimal
-      pure $ SubIncorrect (waitAmt * 60) (T.unpack <$> hint)
-    parseWait = do
-      _ <- P.manyTill P.anyChar (P.asciiCI "an answer too recently") P.<?> "An answer too recently"
-      P.skipMany (P.satisfy (not . isDigit))
-      m <- optional . (P.<?> "Delay minutes") $
-              P.decimal <* P.char 'm' <* P.skipSpace
-      s <- P.decimal <* P.char 's' P.<?> "Delay seconds"
-      pure . SubWait $ maybe 0 (* 60) m + s
-    parseInvalid = SubInvalid <$ P.manyTill P.anyChar (P.asciiCI "solving the right level")
-
--- | Pretty-print a 'SubmitRes'
-showSubmitRes :: SubmitRes -> String
-showSubmitRes = \case
-    SubCorrect Nothing    -> "Correct"
-    SubCorrect (Just r)   -> printf "Correct (Rank %d)" r
-    SubIncorrect i Nothing  -> printf "Incorrect (%d minute wait)" (i `div` 60)
-    SubIncorrect i (Just h) -> printf "Incorrect (%s) (%d minute wait)" h (i `div` 60)
-    SubWait i             -> let (m,s) = i `divMod` 60
-                             in   printf "Wait (%d min %d sec wait)"  m s
-    SubInvalid            -> "Invalid"
-    SubUnknown r          -> printf "Unknown (%s)" r
 
 saverLoader :: AoC a -> SaverLoader (Either AoCError a)
 saverLoader = \case

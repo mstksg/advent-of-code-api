@@ -35,8 +35,9 @@ dependencies:
 
 library:
   source-dirs: src
-  exposed-modules:
-  - Advent
+  other-modules:
+  - Advent.Throttle
+  - Advent.Cache
   dependencies:
   - http-client
   - aeson

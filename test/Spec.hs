@@ -1,6 +1,6 @@
 {-# LANGUAGE ViewPatterns #-}
 
-import           Advent
+import           Advent.API
 import           Control.Monad
 import           Data.List
 import           System.Directory
