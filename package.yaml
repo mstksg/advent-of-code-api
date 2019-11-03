@@ -40,6 +40,9 @@ library:
   dependencies:
   - http-client
   - aeson
+  - stm
+  - http-media
+  - bytestring
   - attoparsec
   - containers
   - http-client-tls

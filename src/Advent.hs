@@ -69,14 +69,15 @@ module Advent (
   -- * Internal
   , parseSubmitRes
   , processHTML
+  , aocBase
   ) where
 
--- import           Network.HTTP.Client
 -- import qualified Network.URI.Encode   as URI
 import           Advent.API
 import           Advent.Cache
 import           Advent.Throttle
 import           Control.Applicative
+import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad.Except
 import           Data.Char
@@ -87,10 +88,11 @@ import           Data.Map                (Map)
 import           Data.Maybe
 import           Data.Set                (Set)
 import           Data.Text               (Text)
-import           Data.Time
+import           Data.Time hiding        (Day)
 import           Data.Typeable
 import           GHC.Generics            (Generic)
 import           Network.Curl
+import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 import           Servant.API
 import           Servant.Client
@@ -98,10 +100,12 @@ import           System.Directory
 import           System.FilePath
 import           Text.HTML.TagSoup.Tree  (TagTree(..))
 import           Text.Printf
+import           Web.Cookie
 import qualified Data.Attoparsec.Text    as P
 import qualified Data.Map                as M
 import qualified Data.Set                as S
 import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
 import qualified System.IO.Unsafe        as Unsafe
 import qualified Text.HTML.TagSoup       as H
 import qualified Text.HTML.TagSoup.Tree  as H
@@ -157,12 +161,12 @@ data AoC :: Type -> Type where
     -- | Fetch prompts for a given day.  Returns a 'Map' of 'Part's and
     -- their associated promps, as HTML.
     AoCPrompt
-        :: Finite 25
+        :: Day
         -> AoC (Map Part Text)
 
     -- | Fetch input, as plaintext.  Returned verbatim.  Be aware that
     -- input might contain trailing newlines.
-    AoCInput :: Finite 25 -> AoC Text
+    AoCInput :: Day -> AoC Text
 
     -- | Submit a plaintext answer (the 'String') to a given day and part.
     -- Receive a server reponse (as HTML) and a response code 'SubmitRes'.
@@ -171,7 +175,7 @@ data AoC :: Type -> Type where
     -- of leading and trailing whitespace and run through 'URI.encode'
     -- before submitting.
     AoCSubmit
-        :: Finite 25
+        :: Day
         -> Part
         -> String
         -> AoC (Text, SubmitRes)
@@ -180,7 +184,7 @@ deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
 
 -- | Get the day associated with a given API command.
-aocDay :: AoC a -> Finite 25
+aocDay :: AoC a -> Day
 aocDay (AoCPrompt d    ) = d
 aocDay (AoCInput  d    ) = d
 aocDay (AoCSubmit d _ _) = d
@@ -254,41 +258,15 @@ defaultAoCOpts y s = AoCOpts
     , _aCurlOpts   = []
     }
 
--- -- | API endpoint for a given command.
--- apiUrl :: Integer -> AoC a -> FilePath
--- apiUrl y = \case
---     AoCPrompt i     -> printf "https://adventofcode.com/%04d/day/%d"        y (dayInt i)
---     AoCInput  i     -> printf "https://adventofcode.com/%04d/day/%d/input"  y (dayInt i)
---     AoCSubmit i _ _ -> printf "https://adventofcode.com/%04d/day/%d/answer" y (dayInt i)
-
--- -- | Create a cookie option from a session key.
--- sessionKeyCookie :: String -> CurlOption
--- sessionKeyCookie = CurlCookie . printf "session=%s"
-
 aocBase :: BaseUrl
-aocBase = BaseUrl Https "adventofcode.com" 80 ""
+aocBase = BaseUrl Https "adventofcode.com" 443 ""
 
-apiReq :: String -> Integer -> AoC a -> ClientM Text
-apiReq sess y = \case
-    AoCPrompt i       -> let r :<|> _        = adventAPIClient (Just (Session sess)) y (Day i) in r
-    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient (Just (Session sess)) y (Day i) in r
-    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient (Just (Session sess)) y (Day i)
+apiReq :: Integer -> AoC a -> ClientM Text
+apiReq y = \case
+    AoCPrompt i       -> let r :<|> _        = adventAPIClient y i in r
+    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient y i in r
+    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient y i
                          in  r (SubmitInfo p ans)
-
--- apiCurl :: String -> AoC a -> [CurlOption]
--- apiCurl sess = \case
---     AoCPrompt _       -> sessionKeyCookie sess
---                        : method_GET
---     AoCInput  _       -> sessionKeyCookie sess
---                        : method_GET
---     AoCSubmit _ p ans -> sessionKeyCookie sess
---                        : CurlPostFields [ printf "level=%d"  (partInt p)
---                                         , printf "answer=%s" (enc ans  )
---                                         ]
---                        : CurlHttpHeaders ["Content-Type: application/x-www-form-urlencoded"]
---                        : method_POST
---   where
---     enc = URI.encode . strip
 
 -- | Cache file for a given 'AoC' command
 apiCache
@@ -324,7 +302,6 @@ runAoC AoCOpts{..} a = do
                          then noCache
                          else saverLoader a
 
-    mgr <- newTlsManager
     cacher . withCurlDo . runExceptT $ do
       rel <- liftIO $ timeToRelease _aYear (aocDay a)
       when (rel > 0) $
@@ -335,11 +312,31 @@ runAoC AoCOpts{..} a = do
          . (maybe  (throwError AoCThrottleError) pure =<<)
          . liftIO
          . throttling aocThrottler (max 1000000 _aThrottle)
-         $ runClientM
-             (apiReq _aSessionKey _aYear a)
-             (mkClientEnv mgr aocBase)
-
+         $ runClientM (apiReq _aYear a) =<< aocClientEnv _aSessionKey
       pure $ processAoC a r
+
+aocClientEnv :: String -> IO ClientEnv
+aocClientEnv s = do
+    t <- getCurrentTime
+    v <- atomically . newTVar $ createCookieJar [c t]
+    mgr <- newTlsManager
+    pure $ ClientEnv mgr aocBase (Just v)
+  where
+    c t = Cookie
+      { cookie_name             = "session"
+      , cookie_value            = T.encodeUtf8 . T.pack $ s
+      , cookie_expiry_time      = addUTCTime oneYear t
+      , cookie_domain           = "adventofcode.com"
+      , cookie_path             = "/"
+      , cookie_creation_time    = t
+      , cookie_last_access_time = t
+      , cookie_persistent       = True
+      , cookie_host_only        = True
+      , cookie_secure_only      = True
+      , cookie_http_only        = True
+      }
+    oneYear = 60 * 60 * 24 * 356.25
+
 
 -- | Process a string response into the type desired.
 processAoC :: AoC a -> String -> a
@@ -429,10 +426,10 @@ saverLoader = \case
                       }
     AoCSubmit{} -> noCache
   where
-    expectedParts :: Finite 25 -> Set Part
-    expectedParts n
-      | n == 24   = S.singleton Part1
-      | otherwise = S.fromDistinctAscList [Part1 ..]
+    expectedParts :: Day -> Set Part
+    expectedParts d
+      | d == maxBound = S.singleton Part1
+      | otherwise     = S.fromDistinctAscList [Part1 ..]
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp
@@ -446,61 +443,27 @@ saverLoader = \case
           | T.null (T.strip ln) = M.empty
           | otherwise           = M.singleton p ln
 
--- | Construct a @'Finite' 25@ (the type of a Day) from a day
--- integer (1 - 25).  If input is out of range, 'Nothing' is returned.  See
--- 'mkDay_' for an unsafe version useful for literals.
---
--- Inverse of 'dayInt'.
-mkDay :: Integer -> Maybe (Finite 25)
-mkDay = packFinite . subtract 1
-
--- | Construct a @'Finite' 25@ (the type of a Day) from a day
--- integer (1 - 25).  Is undefined if input is out of range.  Can be useful
--- for compile-time literals, like @'mkDay_' 4@
---
--- Inverse of 'dayInt'.
-mkDay_ :: Integer -> Finite 25
-mkDay_ = fromMaybe e . mkDay
-  where
-    e = errorWithoutStackTrace "Advent.mkDay_: Date out of range (1 - 25)"
-
 -- | Get time until release of a given challenge.
 timeToRelease
     :: Integer              -- ^ year
-    -> Finite 25            -- ^ day
+    -> Day                  -- ^ day
     -> IO NominalDiffTime
 timeToRelease y d = (challengeReleaseTime y d `diffUTCTime`) <$> getCurrentTime
 
 -- | Check if a challenge has been released yet.
 challengeReleased
     :: Integer              -- ^ year
-    -> Finite 25            -- ^ day
+    -> Day                  -- ^ day
     -> IO Bool
 challengeReleased y = fmap (<= 0) . timeToRelease y
 
 -- | Prompt release time
 challengeReleaseTime
     :: Integer              -- ^ year
-    -> Finite 25            -- ^ day
+    -> Day                  -- ^ day
     -> UTCTime
 challengeReleaseTime y d = UTCTime (fromGregorian y 12 (fromIntegral (dayInt d)))
                                    (5 * 60 * 60)
-
--- | Convert a @'Finite' 25@ day into a day integer (1 - 25).  Inverse of
--- 'mkDay'.
-dayInt :: Finite 25 -> Integer
-dayInt = (+ 1) . getFinite
-
--- | Convert a 'Part' to an 'Int'.
-partInt :: Part -> Int
-partInt Part1 = 1
-partInt Part2 = 2
-
--- | A character associated with a given part.  'Part1' is associated with
--- @\'a\'@, and 'Part2' is associated with @\'b\'@
-partChar :: Part -> Char
-partChar Part1 = 'a'
-partChar Part2 = 'b'
 
 strip :: String -> String
 strip = T.unpack . T.strip . T.pack
