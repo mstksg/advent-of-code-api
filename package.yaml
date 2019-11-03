@@ -1,5 +1,5 @@
 name:                advent-of-code-api
-version:             0.1.2.3
+version:             0.2.0.0
 github:              "mstksg/advent-of-code-api"
 license:             BSD3
 author:              "Justin Le"
@@ -19,8 +19,6 @@ category:            Web
 description: |
     Haskell bindings for Advent of Code REST API.  Please use responsibly!
     See README.md or "Advent" module for an introduction and tutorial.
-
-    Requires libcurl.
 
 ghc-options:
 - -Wall

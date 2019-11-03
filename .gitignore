@@ -4,3 +4,4 @@ advent-of-code-api.cabal
 dist-newstyle/
 *~
 tmp-test-data
+*.dump-hi

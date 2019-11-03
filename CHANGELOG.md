@@ -1,6 +1,18 @@
 Changelog
 =========
 
+Version 0.2.0.0
+---------------
+
+*November 3, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.0.0>
+
+*   Switch from libcurl to servant, which allows for shedding of external
+    dependencies.
+*   Expose raw servant API and client functions, for those who want to build
+    documentation or a mock server or low-level client.
+
 Version 0.1.2.X
 ---------------
 

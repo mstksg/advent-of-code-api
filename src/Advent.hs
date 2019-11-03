@@ -13,7 +13,7 @@
 
 -- |
 -- Module      : Advent
--- Copyright   : (c) Justin Le 2018
+-- Copyright   : (c) Justin Le 2019
 -- License     : BSD3
 --
 -- Maintainer  : justin@jle.im
@@ -67,6 +67,7 @@ module Advent (
   -- ** Throttler
   , setAoCThrottleLimit, getAoCThrottleLimit
   -- * Internal
+  , aocReq
   , aocBase
   ) where
 
@@ -160,10 +161,8 @@ aocDay (AoCSubmit d _ _) = d
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
 data AoCError
-    -- | A libcurl error, with response code and response body
-    = AoCCurlError CurlCode String
     -- | An error in the http request itself
-    | AoCClientError ClientError
+    = AoCClientError ClientError
     -- | Tried to interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime
@@ -226,11 +225,13 @@ defaultAoCOpts y s = AoCOpts
     , _aCurlOpts   = []
     }
 
+-- | HTTPS base of Advent of Code API.
 aocBase :: BaseUrl
 aocBase = BaseUrl Https "adventofcode.com" 443 ""
 
-apiReq :: Integer -> AoC a -> ClientM a
-apiReq yr = \case
+-- | 'ClientM' request for a given 'AoC' API call.
+aocReq :: Integer -> AoC a -> ClientM a
+aocReq yr = \case
     AoCPrompt i       -> let r :<|> _        = adventAPIClient yr i in r
     AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient yr i in r
     AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient yr i
@@ -277,7 +278,7 @@ runAoC AoCOpts{..} a = do
 
       mtr <- liftIO
            . throttling aocThrottler (max 1000000 _aThrottle)
-           $ runClientM (apiReq _aYear a) =<< aocClientEnv _aSessionKey
+           $ runClientM (aocReq _aYear a) =<< aocClientEnv _aSessionKey
       mcr <- maybe (throwError AoCThrottleError) pure mtr
       either (throwError . AoCClientError) pure mcr
 
