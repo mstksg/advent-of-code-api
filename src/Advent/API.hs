@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -83,6 +84,10 @@ import qualified Network.HTTP.Media     as M
 import qualified Text.HTML.TagSoup      as H
 import qualified Text.HTML.TagSoup.Tree as H
 import qualified Web.FormUrlEncoded     as WF
+
+#if !MIN_VERSION_base(4,11,0)
+import           Data.Semigroup ((<>))
+#endif
 
 -- | Describes the day: a number between 1 and 25 inclusive.
 --

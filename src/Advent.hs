@@ -76,7 +76,6 @@ import           Advent.Throttle
 import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad.Except
-import           Data.Functor
 import           Data.Kind
 import           Data.Map                (Map)
 import           Data.Maybe
@@ -99,8 +98,13 @@ import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified System.IO.Unsafe        as Unsafe
 
-#if !MIN_VERSION_base(4,11,0)
+#if MIN_VERSION_base(4,11,0)
+import           Data.Functor
+#else
 import           Data.Semigroup ((<>))
+
+(<&>) :: Functor f => f a -> (a -> b) -> f b
+(<&>) = flip fmap
 #endif
 
 initialThrottleLimit :: Int
@@ -182,7 +186,15 @@ aocDay (AoCLeaderboard _) = Nothing
 -- Does not cover any asynchronous or IO errors.
 data AoCError
     -- | An error in the http request itself
+    --
+    -- Note that if you are building this with servant-client-core <= 0.16,
+    -- this will contain @ServantError@ instead of @ClientError@, which was
+    -- the previous name of ths type.
+#if MIN_VERSION_servant_client_core(0,16,0)
     = AoCClientError ClientError
+#else
+    = AoCClientError ServantError
+#endif
     -- | Tried to interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime

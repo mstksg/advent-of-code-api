@@ -39,7 +39,6 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps: []
-# - taggy-0.2.1
 
 ghc-options:
   "$locals": -ddump-to-file -ddump-hi
