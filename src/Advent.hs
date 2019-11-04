@@ -42,8 +42,6 @@
 -- Please use responsibly.  All actions are by default rate limited to one
 -- per three seconds, but this can be adjusted to a hard-limited cap of one
 -- per second.
---
--- Note that leaderboard API is not yet supported.
 
 module Advent (
   -- * API
@@ -51,6 +49,7 @@ module Advent (
   , Part(..)
   , AoCOpts(..)
   , SubmitRes(..), showSubmitRes
+  , Leaderboard(..), LeaderboardMember(..)
   , runAoC
   , defaultAoCOpts
   , AoCError(..)
@@ -149,14 +148,34 @@ data AoC :: Type -> Type where
         -> String
         -> AoC (Text, SubmitRes)
 
+    -- | Fetch the leaderboard for a given leaderboard public code (owner
+    -- member ID).  Requires session key.
+    --
+    -- __NOTE__: This is the most expensive and taxing possible API call,
+    -- and makes up the majority of bandwidth to the Advent of Code
+    -- servers.  Please use this super respectfully: if you set up
+    -- automation for this, please do not use it more than once per day.
+    --
+    -- The public code can be found in the URL of the leaderboard:
+    --
+    -- > https://adventofcode.com/2019/leaderboard/private/view/12345
+    --
+    -- (the @12345@ above)
+    --
+    -- @since 0.2.0.0
+    AoCLeaderboard
+        :: Integer
+        -> AoC Leaderboard
+
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
 
--- | Get the day associated with a given API command.
-aocDay :: AoC a -> Day
-aocDay (AoCPrompt d    ) = d
-aocDay (AoCInput  d    ) = d
-aocDay (AoCSubmit d _ _) = d
+-- | Get the day associated with a given API command, if there is one.
+aocDay :: AoC a -> Maybe Day
+aocDay (AoCPrompt d     ) = Just d
+aocDay (AoCInput  d     ) = Just d
+aocDay (AoCSubmit d _ _ ) = Just d
+aocDay (AoCLeaderboard _) = Nothing
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
@@ -232,10 +251,13 @@ aocBase = BaseUrl Https "adventofcode.com" 443 ""
 -- | 'ClientM' request for a given 'AoC' API call.
 aocReq :: Integer -> AoC a -> ClientM a
 aocReq yr = \case
-    AoCPrompt i       -> let r :<|> _        = adventAPIClient yr i in r
-    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIClient yr i in r
-    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIClient yr i
+    AoCPrompt i       -> let r :<|> _        = adventAPIPuzzleClient yr i in r
+    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient yr i in r
+    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient yr i
                          in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
+    AoCLeaderboard c  -> let _ :<|> r = adventAPIClient yr
+                         in  r (PublicCode c)
+
 
 -- | Cache file for a given 'AoC' command
 apiCache
@@ -244,9 +266,10 @@ apiCache
     -> AoC a
     -> Maybe FilePath
 apiCache sess yr = \case
-    AoCPrompt d -> Just $ printf "prompt/%04d/%02d.html"        yr (dayInt d)
-    AoCInput  d -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
-    AoCSubmit{} -> Nothing
+    AoCPrompt d      -> Just $ printf "prompt/%04d/%02d.html"        yr (dayInt d)
+    AoCInput  d      -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
+    AoCSubmit{}      -> Nothing
+    AoCLeaderboard{} -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
@@ -272,9 +295,10 @@ runAoC AoCOpts{..} a = do
                          else saverLoader a
 
     cacher . withCurlDo . runExceptT $ do
-      rel <- liftIO $ timeToRelease _aYear (aocDay a)
-      when (rel > 0) $
-        throwError $ AoCReleaseError rel
+      forM_ (aocDay a) $ \d -> do
+        rel <- liftIO $ timeToRelease _aYear d
+        when (rel > 0) $
+          throwError $ AoCReleaseError rel
 
       mtr <- liftIO
            . throttling aocThrottler (max 1000000 _aThrottle)
@@ -317,6 +341,7 @@ saverLoader = \case
                       , _slLoad = Just . Right
                       }
     AoCSubmit{} -> noCache
+    AoCLeaderboard{} -> noCache
   where
     expectedParts :: Day -> Set Part
     expectedParts d

@@ -29,10 +29,14 @@ module Advent.API (
   , Part(..)
   , SubmitInfo(..)
   , SubmitRes(..), showSubmitRes
+  , PublicCode(..)
+  , Leaderboard(..)
+  , LeaderboardMember(..)
   -- * Servant API
   , AdventAPI
   , adventAPI
   , adventAPIClient
+  , adventAPIPuzzleClient
   -- * Util
   , mkDay, mkDay_, dayInt
   , partInt
@@ -54,12 +58,15 @@ import           Data.Map               (Map)
 import           Data.Maybe
 import           Data.Proxy
 import           Data.Text              (Text)
+import           Data.Time.Clock
+import           Data.Time.Clock.POSIX
 import           Data.Typeable
 import           GHC.Generics
 import           Servant.API
 import           Servant.Client
 import           Text.HTML.TagSoup.Tree (TagTree(..))
 import           Text.Printf
+import           Text.Read              (readMaybe)
 import qualified Data.Attoparsec.Text   as P
 import qualified Data.ByteString.Lazy   as BSL
 import qualified Data.Map               as M
@@ -75,7 +82,7 @@ import qualified Web.FormUrlEncoded     as WF
 -- Represented by a 'Finite' ranging from 0 to 24 inclusive; you should
 -- probably make one using the smart constructor 'mkDay'.
 newtype Day = Day { dayFinite :: Finite 25 }
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord, Enum, Bounded, Typeable, Generic)
 
 instance Show Day where
     showsPrec = showsUnaryWith (\d -> showsPrec d . dayInt) "mkDay"
@@ -118,12 +125,43 @@ data SubmitRes
     | SubUnknown String
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
+-- | Member ID of public leaderboard (the first part of the registration
+-- code, before the hyphen).  It can be found as the number in the URL:
+--
+-- > https://adventofcode.com/2019/leaderboard/private/view/12345
+--
+-- (the @12345@ above)
+newtype PublicCode = PublicCode { getPublicCode :: Integer }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic)
+
+data Leaderboard = LB
+    { lbEvent   :: Integer
+    , lbOwnerId :: Integer
+    , lbMembers :: Map Int LeaderboardMember
+    }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
+data LeaderboardMember = LBM
+    { lbmGlobalScore :: Integer
+    , lbmName        :: Maybe Text
+    , lbmLocalScore  :: Integer
+    , lbmId          :: Integer
+    , lbmLastStarTS  :: Maybe UTCTime
+    , lbmStars       :: Int
+    , lbmCompletion  :: Map Day (Map Part UTCTime)
+    }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
 instance ToHttpApiData Part where
     toUrlPiece = T.pack . show . partInt
     toQueryParam = toUrlPiece
 
 instance ToHttpApiData Day where
     toUrlPiece = T.pack . show . dayInt
+    toQueryParam = toUrlPiece
+
+instance ToHttpApiData PublicCode where
+    toUrlPiece   = (<> ".json") . T.pack . show . getPublicCode
     toQueryParam = toUrlPiece
 
 instance WF.ToForm SubmitInfo where
@@ -171,18 +209,71 @@ instance (FromArticles a, FromArticles b) => FromArticles (a :<|> b) where
 instance FromArticles SubmitRes where
     fromArticles = parseSubmitRes . fold  . listToMaybe
 
+instance FromJSON Leaderboard where
+    parseJSON = withObject "Leaderboard" $ \o ->
+        LB <$> (strInt =<< (o .: "event"))
+           <*> (strInt =<< (o .: "owner_id"))
+           <*> o .: "members"
+      where
+        strInt t = case readMaybe t of
+          Nothing -> fail "bad int"
+          Just i  -> pure i
+
+instance FromJSON LeaderboardMember where
+    parseJSON = withObject "LeaderboardMember" $ \o ->
+        LBM <$> o .: "global_score"
+            <*> optional (o .: "name")
+            <*> o .: "local_score"
+            <*> (strInt =<< (o .: "id"))
+            <*> optional (fromEpoch =<< (o .: "last_star_ts"))
+            <*> o .: "stars"
+            <*> (do cdl <- o .: "completion_day_level"
+                    (traverse . traverse) ((fromEpoch =<<) . (.: "get_star_ts")) cdl
+                )
+      where
+        strInt t = case readMaybe t of
+          Nothing -> fail "bad int"
+          Just i  -> pure i
+        fromEpoch t = case readMaybe t of
+          Nothing -> fail "bad stamp"
+          Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
+
+instance FromJSONKey Day where
+    fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+instance FromJSONKey Part where
+    fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+
+instance FromJSON Part where
+    parseJSON = withText "Part" $ \case
+      "1" -> pure Part1
+      "2" -> pure Part2
+      _   -> fail "Bad part"
+instance FromJSON Day where
+    parseJSON = withText "Day" $ \t ->
+      case readMaybe (T.unpack t) of
+        Nothing -> fail "No read day"
+        Just i  -> case mkDay i of
+          Nothing -> fail "Day out of range"
+          Just d  -> pure d
+
+
+
 -- | REST API of Advent of Code.
 --
 -- Note that most of these requests assume a "session=" cookie.
-type AdventAPI = Capture "year" Integer
-              :> "day"
-              :> Capture "day" Day
-              :> (Get '[Articles] (Map Part Text)
-             :<|> "input" :> Get '[RawText] Text
-             :<|> "answer"
-                      :> ReqBody '[FormUrlEncoded] SubmitInfo
-                      :> Post    '[Articles] (Text :<|> SubmitRes)
-                 )
+type AdventAPI =
+      Capture "year" Integer
+   :> ("day" :> Capture "day" Day
+             :> (Get '[Articles] (Map Part Text)
+            :<|> "input" :> Get '[RawText] Text
+            :<|> "answer"
+                     :> ReqBody '[FormUrlEncoded] SubmitInfo
+                     :> Post    '[Articles] (Text :<|> SubmitRes)
+                )
+  :<|> "leaderboard" :> "private" :> "view"
+                     :> Capture "code" PublicCode
+                     :> Get '[JSON] Leaderboard
+      )
 
 -- | 'Proxy' used for /servant/ functions.
 adventAPI :: Proxy AdventAPI
@@ -191,9 +282,17 @@ adventAPI = Proxy
 -- | 'ClientM' requests based on 'AdventAPI', generated by servant.
 adventAPIClient
     :: Integer
+    -> (Day -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes)) )
+  :<|> (PublicCode -> ClientM Leaderboard)
+adventAPIClient = client adventAPI
+
+adventAPIPuzzleClient
+    :: Integer
     -> Day
     -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes))
-adventAPIClient = client adventAPI
+adventAPIPuzzleClient y = pis
+  where
+    pis :<|> _ = adventAPIClient y
 
 -- | Process an HTML webpage into a list of all contents in <article>s
 processHTML :: Text -> [Text]
