@@ -13,12 +13,13 @@ extra-source-files:
 - test-data/*.txt
 
 # Metadata used when publishing your package
-synopsis:            Advent of Code REST API bindings
+synopsis:            Advent of Code REST API bindings and servant API
 category:            Web
 
 description: |
-    Haskell bindings for Advent of Code REST API.  Please use responsibly!
-    See README.md or "Advent" module for an introduction and tutorial.
+  Haskell bindings for Advent of Code REST API and a servant API.  Please use
+  responsibly! See README.md or "Advent" module for an introduction and
+  tutorial.
 
 ghc-options:
 - -Wall

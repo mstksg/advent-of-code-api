@@ -20,6 +20,10 @@
 -- servers, generating documentation and other servanty things, or
 -- low-level raw requests.
 --
+-- If you use this to make requests directly, please use responsibly: do
+-- not make automated requests more than once per day and throttle all
+-- manual requestes.  See notes in "Advent".
+--
 -- @since 0.2.0.0
 --
 
@@ -44,6 +48,9 @@ module Advent.API (
   -- * Internal
   , processHTML
   , parseSubmitRes
+  , Articles
+  , FromArticles(..)
+  , RawText
   ) where
 
 import           Control.Applicative
@@ -134,21 +141,23 @@ data SubmitRes
 newtype PublicCode = PublicCode { getPublicCode :: Integer }
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
+-- | Leaderboard type, representing private leaderboard information.
 data Leaderboard = LB
-    { lbEvent   :: Integer
-    , lbOwnerId :: Integer
-    , lbMembers :: Map Int LeaderboardMember
+    { lbEvent   :: Integer                        -- ^ The year of the event
+    , lbOwnerId :: Integer                        -- ^ The Member ID of the owner, or the public code
+    , lbMembers :: Map Integer LeaderboardMember  -- ^ A map from member IDs to their leaderboard info
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | Leaderboard position for a given member.
 data LeaderboardMember = LBM
-    { lbmGlobalScore :: Integer
-    , lbmName        :: Maybe Text
-    , lbmLocalScore  :: Integer
-    , lbmId          :: Integer
-    , lbmLastStarTS  :: Maybe UTCTime
-    , lbmStars       :: Int
-    , lbmCompletion  :: Map Day (Map Part UTCTime)
+    { lbmGlobalScore :: Integer                     -- ^ Global leaderboard score
+    , lbmName        :: Maybe Text                  -- ^ Username, if user specifies one
+    , lbmLocalScore  :: Integer                     -- ^ Score for this leaderboard
+    , lbmId          :: Integer                     -- ^ Member ID
+    , lbmLastStarTS  :: Maybe UTCTime               -- ^ Time of last puzzle solved, if any
+    , lbmStars       :: Int                         -- ^ Number of stars (puzzle parts) solved
+    , lbmCompletion  :: Map Day (Map Part UTCTime)  -- ^ Completion times of each day and puzzle part
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
@@ -286,6 +295,8 @@ adventAPIClient
   :<|> (PublicCode -> ClientM Leaderboard)
 adventAPIClient = client adventAPI
 
+-- | A subset of 'adventAPIClient' for only puzzle-related API routes, not
+-- leaderboard ones.
 adventAPIPuzzleClient
     :: Integer
     -> Day

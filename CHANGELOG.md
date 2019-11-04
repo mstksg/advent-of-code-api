@@ -10,6 +10,7 @@ Version 0.2.0.0
 
 *   Switch from libcurl to servant, which allows for shedding of external
     dependencies.
+*   Support leaderboard API with data type.
 *   Expose raw servant API and client functions, for those who want to build
     documentation or a mock server or low-level client.
 

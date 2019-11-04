@@ -121,10 +121,9 @@ getAoCThrottleLimit = getLimit aocThrottler
 -- | An API command.  An @'AoC' a@ an AoC API request that returns
 -- results of type @a@.
 --
--- A lot of these commands take @'Finite' 25@, which represents a day of
--- December up to and including Christmas Day (December 25th).  You can
--- convert an integer day (1 - 25) into a @'Finite' 25@ representing that
--- day using 'mkDay' or 'mkDay_'.
+-- A lot of these commands take 'Day', which represents a day of December
+-- up to and including Christmas Day (December 25th).  You can convert an
+-- integer day (1 - 25) into a 'Day' using 'mkDay' or 'mkDay_'.
 data AoC :: Type -> Type where
     -- | Fetch prompts for a given day.  Returns a 'Map' of 'Part's and
     -- their associated promps, as HTML.
@@ -151,16 +150,18 @@ data AoC :: Type -> Type where
     -- | Fetch the leaderboard for a given leaderboard public code (owner
     -- member ID).  Requires session key.
     --
-    -- __NOTE__: This is the most expensive and taxing possible API call,
-    -- and makes up the majority of bandwidth to the Advent of Code
-    -- servers.  Please use this super respectfully: if you set up
-    -- automation for this, please do not use it more than once per day.
-    --
     -- The public code can be found in the URL of the leaderboard:
     --
     -- > https://adventofcode.com/2019/leaderboard/private/view/12345
     --
     -- (the @12345@ above)
+    --
+    -- __NOTE__: This is the most expensive and taxing possible API call,
+    -- and makes up the majority of bandwidth to the Advent of Code
+    -- servers.  As a courtesy to all who are participating in Advent of
+    -- Code, please use this super respectfully, especially in December: if
+    -- you set up automation for this, please do not use it more than once
+    -- per day.
     --
     -- @since 0.2.0.0
     AoCLeaderboard
