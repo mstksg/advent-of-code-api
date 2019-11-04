@@ -10,7 +10,10 @@
 
 name: Haskell Stack Project CI
 
-on: [push]
+on:
+  push:
+  schedule:
+  - cron: "0 0 * * 1"
 
 jobs:
   build:
@@ -26,17 +29,12 @@ jobs:
         - { build: stack, resolver: "--resolver lts-14"  }
         - { build: stack, resolver: "--resolver nightly" }
         - { build: stack, resolver: ""                   }
-        - { build: cabal, ghc: 8.0.2, cabal-install: "1.24" }
-        - { build: cabal, ghc: 8.2.2, cabal-install: "2.0"  }
-        - { build: cabal, ghc: 8.4.4, cabal-install: "2.2"  }
-        - { build: cabal, ghc: 8.6.5, cabal-install: "2.4"  }
-        - { build: cabal, ghc: 8.8.1, cabal-install: "2.4"  }   # currently not working for >= 3.0
-        # use this to include any dependencies from OS package managers
+        - { build: cabal, ghc: 8.0.2, cabal-install: "2.0" }   # setup-haskell doesn't support 1.24
+        - { build: cabal, ghc: 8.2.2, cabal-install: "2.0" }
+        - { build: cabal, ghc: 8.4.4, cabal-install: "2.2" }
+        - { build: cabal, ghc: 8.6.5, cabal-install: "2.4" }
+        - { build: cabal, ghc: 8.8.1, cabal-install: "2.4" }   # currently not working for >= 3.0
         include: []
-        # - os: macOS-latest
-        #   brew: anybrewdeps
-        # - os: ubuntu-latest
-        #   apt-get: libblas-dev liblapack-dev
 
         exclude:
         - os: macOS-latest
