@@ -84,7 +84,6 @@ import           Data.Text               (Text)
 import           Data.Time hiding        (Day)
 import           Data.Typeable
 import           GHC.Generics            (Generic)
-import           Network.Curl
 import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 import           Servant.API
@@ -229,14 +228,6 @@ data AoCOpts = AoCOpts
       -- | Throttle delay, in milliseconds.  Minimum is 1000000.  Default
       -- is 3000000 (3 seconds).
     , _aThrottle   :: Int
-      -- | (Low-level usage) Extra 'CurlOption' options to feed to the
-      -- libcurl bindings.  Meant for things like proxy options and custom
-      -- SSL certificates.  You should normally not have to add anything
-      -- here, since the library manages cookies, request methods, etc. for
-      -- you.  Anything other than tweaking low-level network options (like
-      -- the ones mentioned previously) will likely break everything.
-      -- Default is @[]@.
-    , _aCurlOpts   :: [CurlOption]
     }
   deriving (Show, Typeable, Generic)
 
@@ -254,7 +245,6 @@ defaultAoCOpts y s = AoCOpts
     , _aCache      = Nothing
     , _aForce      = False
     , _aThrottle   = 3000000
-    , _aCurlOpts   = []
     }
 
 -- | HTTPS base of Advent of Code API.
@@ -307,7 +297,7 @@ runAoC AoCOpts{..} a = do
                          then noCache
                          else saverLoader a
 
-    cacher . withCurlDo . runExceptT $ do
+    cacher . runExceptT $ do
       forM_ (aocDay a) $ \d -> do
         rel <- liftIO $ timeToRelease _aYear d
         when (rel > 0) $

@@ -42,7 +42,6 @@ library:
   - attoparsec
   - bytestring
   - containers
-  - curl
   - deepseq
   - finite-typelits
   - http-api-data
