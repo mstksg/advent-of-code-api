@@ -1,10 +1,19 @@
 Changelog
 =========
 
+Version 0.2.1.0
+---------------
+
+*November 5, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.1.0>
+
+*   Export `Day` constructor from *Advent*
+
 Version 0.2.0.0
 ---------------
 
-*November 3, 2019*
+*November 4, 2019*
 
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.0.0>
 

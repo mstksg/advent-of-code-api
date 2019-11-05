@@ -47,6 +47,7 @@ module Advent (
   -- * API
     AoC(..)
   , Part(..)
+  , Day(..)
   , AoCOpts(..)
   , SubmitRes(..), showSubmitRes
   , Leaderboard(..), LeaderboardMember(..)
