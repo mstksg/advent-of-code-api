@@ -338,13 +338,13 @@ parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
     choices             = asum [ P.try parseCorrect   P.<?> "Correct"
                                , P.try parseIncorrect P.<?> "Incorrect"
                                , P.try parseWait      P.<?> "Wait"
-                               , parseInvalid   P.<?> "Invalid"
+                               , P.try parseInvalid   P.<?> "Invalid"
                                , fail "No option recognized"
                                ]
     parseCorrect :: P.Parsec Void Text SubmitRes
     parseCorrect = do
       _ <- P.manyTill P.anySingle (P.try $ P.string' "that's the right answer") P.<?> "Right answer"
-      r <- optional . (P.<?> "Rank") $ do
+      r <- optional . (P.<?> "Rank") . P.try $ do
         P.manyTill P.anySingle (P.try $ P.string' "rank")
           *> P.skipMany (P.satisfy (not . isDigit))
         P.decimal
