@@ -23,9 +23,8 @@ jobs:
         # use this to specify what resolvers and ghc to use
         plan:
         # - { build: stack, resolver: "--resolver lts-9"  }
-        - { build: stack, resolver: "--resolver lts-11"  }
+        # - { build: stack, resolver: "--resolver lts-11"  }
         - { build: stack, resolver: "--resolver lts-12"  }
-        - { build: stack, resolver: "--resolver lts-13"  }
         - { build: stack, resolver: "--resolver lts-14"  }
         - { build: stack, resolver: "--resolver nightly" }
         - { build: stack, resolver: ""                   }
