@@ -39,7 +39,7 @@ library:
   - Advent.Cache
   dependencies:
   - aeson
-  - attoparsec
+  - megaparsec
   - bytestring
   - containers
   - deepseq

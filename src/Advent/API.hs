@@ -54,6 +54,7 @@ module Advent.API (
   , RawText
   ) where
 
+-- import qualified Data.Attoparsec.Text    as P
 import           Control.Applicative
 import           Control.Monad
 import           Data.Aeson
@@ -62,28 +63,31 @@ import           Data.Char
 import           Data.Finite
 import           Data.Foldable
 import           Data.Functor.Classes
-import           Data.Map               (Map)
+import           Data.Map                   (Map)
 import           Data.Maybe
 import           Data.Proxy
-import           Data.Text              (Text)
+import           Data.Text                  (Text)
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
 import           Data.Typeable
+import           Data.Void
 import           GHC.Generics
 import           Servant.API
 import           Servant.Client
-import           Text.HTML.TagSoup.Tree (TagTree(..))
+import           Text.HTML.TagSoup.Tree     (TagTree(..))
 import           Text.Printf
-import           Text.Read              (readMaybe)
-import qualified Data.Attoparsec.Text   as P
-import qualified Data.ByteString.Lazy   as BSL
-import qualified Data.Map               as M
-import qualified Data.Text              as T
-import qualified Data.Text.Encoding     as T
-import qualified Network.HTTP.Media     as M
-import qualified Text.HTML.TagSoup      as H
-import qualified Text.HTML.TagSoup.Tree as H
-import qualified Web.FormUrlEncoded     as WF
+import           Text.Read                  (readMaybe)
+import qualified Data.ByteString.Lazy       as BSL
+import qualified Data.Map                   as M
+import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as T
+import qualified Network.HTTP.Media         as M
+import qualified Text.HTML.TagSoup          as H
+import qualified Text.HTML.TagSoup.Tree     as H
+import qualified Text.Megaparsec            as P
+import qualified Text.Megaparsec.Char       as P
+import qualified Text.Megaparsec.Char.Lexer as P
+import qualified Web.FormUrlEncoded         as WF
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))
@@ -323,43 +327,44 @@ processHTML = map H.renderTree
 
 -- | Parse 'Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
-parseSubmitRes = either SubUnknown id
-               . P.parseOnly choices
+parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
+               . P.runParser choices "response"
                . mconcat
                . mapMaybe deTag
                . H.parseTags
   where
     deTag (H.TagText t) = Just t
     deTag _             = Nothing
-    choices             = asum [ parseCorrect   P.<?> "Correct"
-                               , parseIncorrect P.<?> "Incorrect"
-                               , parseWait      P.<?> "Wait"
+    choices             = asum [ P.try parseCorrect   P.<?> "Correct"
+                               , P.try parseIncorrect P.<?> "Incorrect"
+                               , P.try parseWait      P.<?> "Wait"
                                , parseInvalid   P.<?> "Invalid"
                                , fail "No option recognized"
                                ]
+    parseCorrect :: P.Parsec Void Text SubmitRes
     parseCorrect = do
-      _ <- P.manyTill P.anyChar (P.asciiCI "that's the right answer") P.<?> "Right answer"
+      _ <- P.manyTill P.anySingle (P.try $ P.string' "that's the right answer") P.<?> "Right answer"
       r <- optional . (P.<?> "Rank") $ do
-        P.manyTill P.anyChar (P.asciiCI "rank")
+        P.manyTill P.anySingle (P.try $ P.string' "rank")
           *> P.skipMany (P.satisfy (not . isDigit))
         P.decimal
       pure $ SubCorrect r
     parseIncorrect = do
-      _ <- P.manyTill P.anyChar (P.asciiCI "that's not the right answer") P.<?> "Not the right answer"
-      hint <- optional . (P.<?> "Hint") $ do
-        P.manyTill P.anyChar "your answer is" *> P.skipSpace
-        P.takeWhile1 (/= '.')
-      P.manyTill P.anyChar (P.asciiCI "wait") *> P.skipSpace
-      waitAmt <- (1 <$ P.asciiCI "one") <|> P.decimal
+      _ <- P.manyTill P.anySingle (P.try $ P.string' "that's not the right answer") P.<?> "Not the right answer"
+      hint <- optional . (P.<?> "Hint") . P.try $ do
+        P.manyTill P.anySingle (P.try "your answer is") *> P.space1
+        P.takeWhile1P (Just "dot") (/= '.')
+      P.manyTill P.anySingle (P.try $ P.string' "wait") *> P.space1
+      waitAmt <- P.try (1 <$ P.string' "one") <|> P.decimal
       pure $ SubIncorrect (waitAmt * 60) (T.unpack <$> hint)
     parseWait = do
-      _ <- P.manyTill P.anyChar (P.asciiCI "an answer too recently") P.<?> "An answer too recently"
+      _ <- P.manyTill P.anySingle (P.try $ P.string' "an answer too recently") P.<?> "An answer too recently"
       P.skipMany (P.satisfy (not . isDigit))
-      m <- optional . (P.<?> "Delay minutes") $
-              P.decimal <* P.char 'm' <* P.skipSpace
+      m <- optional . (P.<?> "Delay minutes") . P.try $
+              P.decimal <* P.char 'm' <* P.space1
       s <- P.decimal <* P.char 's' P.<?> "Delay seconds"
       pure . SubWait $ maybe 0 (* 60) m + s
-    parseInvalid = SubInvalid <$ P.manyTill P.anyChar (P.asciiCI "solving the right level")
+    parseInvalid = SubInvalid <$ P.manyTill P.anySingle (P.try $ P.string' "solving the right level")
 
 -- | Pretty-print a 'SubmitRes'
 showSubmitRes :: SubmitRes -> String
