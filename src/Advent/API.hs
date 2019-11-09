@@ -328,7 +328,7 @@ processHTML = map H.renderTree
 -- | Parse 'Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
 parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
-               . P.runParser choices "response"
+               . P.runParser choices "Submission Response"
                . mconcat
                . mapMaybe deTag
                . H.parseTags
@@ -338,33 +338,32 @@ parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
     choices             = asum [ P.try parseCorrect   P.<?> "Correct"
                                , P.try parseIncorrect P.<?> "Incorrect"
                                , P.try parseWait      P.<?> "Wait"
-                               , P.try parseInvalid   P.<?> "Invalid"
-                               , fail "No option recognized"
+                               ,       parseInvalid   P.<?> "Invalid"
                                ]
     parseCorrect :: P.Parsec Void Text SubmitRes
     parseCorrect = do
-      _ <- P.manyTill P.anySingle (P.try $ P.string' "that's the right answer") P.<?> "Right answer"
+      _ <- P.manyTill P.anySingle (P.string' "that's the right answer") P.<?> "Right answer"
       r <- optional . (P.<?> "Rank") . P.try $ do
-        P.manyTill P.anySingle (P.try $ P.string' "rank")
+        P.manyTill P.anySingle (P.string' "rank")
           *> P.skipMany (P.satisfy (not . isDigit))
         P.decimal
       pure $ SubCorrect r
     parseIncorrect = do
-      _ <- P.manyTill P.anySingle (P.try $ P.string' "that's not the right answer") P.<?> "Not the right answer"
+      _ <- P.manyTill P.anySingle (P.string' "that's not the right answer") P.<?> "Not the right answer"
       hint <- optional . (P.<?> "Hint") . P.try $ do
-        P.manyTill P.anySingle (P.try "your answer is") *> P.space1
+        P.manyTill P.anySingle "your answer is" *> P.space1
         P.takeWhile1P (Just "dot") (/= '.')
-      P.manyTill P.anySingle (P.try $ P.string' "wait") *> P.space1
-      waitAmt <- P.try (1 <$ P.string' "one") <|> P.decimal
+      P.manyTill P.anySingle (P.string' "wait") *> P.space1
+      waitAmt <- (1 <$ P.string' "one") <|> P.decimal
       pure $ SubIncorrect (waitAmt * 60) (T.unpack <$> hint)
     parseWait = do
-      _ <- P.manyTill P.anySingle (P.try $ P.string' "an answer too recently") P.<?> "An answer too recently"
+      _ <- P.manyTill P.anySingle (P.string' "an answer too recently") P.<?> "An answer too recently"
       P.skipMany (P.satisfy (not . isDigit))
       m <- optional . (P.<?> "Delay minutes") . P.try $
               P.decimal <* P.char 'm' <* P.space1
       s <- P.decimal <* P.char 's' P.<?> "Delay seconds"
       pure . SubWait $ maybe 0 (* 60) m + s
-    parseInvalid = SubInvalid <$ P.manyTill P.anySingle (P.try $ P.string' "solving the right level")
+    parseInvalid = SubInvalid <$ P.manyTill P.anySingle (P.string' "solving the right level")
 
 -- | Pretty-print a 'SubmitRes'
 showSubmitRes :: SubmitRes -> String

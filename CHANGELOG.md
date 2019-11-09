@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.2.2.0
+---------------
+
+*November 9, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.2.0>
+
+*   Rewrote submission response parser using megaparsec for better errors
+
 Version 0.2.1.0
 ---------------
 
