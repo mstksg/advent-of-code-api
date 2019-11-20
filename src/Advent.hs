@@ -349,8 +349,8 @@ saverLoader = \case
   where
     expectedParts :: Day -> Set Part
     expectedParts d
-      | dayFinite d == maxBound = S.singleton Part1
-      | otherwise               = S.fromDistinctAscList [Part1 ..]
+      | d == maxBound = S.singleton Part1
+      | otherwise     = S.fromDistinctAscList [Part1 ..]
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp

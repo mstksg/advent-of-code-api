@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.2.1
+---------------
+
+*November 19, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.2.1>
+
+*   Fixed prompt parser that would fail on 2016 Day 2 Part 2 because of a
+    malformed `<span>...</title>` tag pair in the prompt HTML
+
 Version 0.2.2.0
 ---------------
 

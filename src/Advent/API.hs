@@ -320,10 +320,18 @@ processHTML = map H.renderTree
             . mapMaybe isArticle
             . H.universeTree
             . H.parseTree
+            . cleanDoubleTitle
   where
     isArticle :: TagTree Text -> Maybe [TagTree Text]
     isArticle (TagBranch n _ ts) = ts <$ guard (n == "article")
     isArticle _                  = Nothing
+    -- 2016 Day 2 Part 2 has a malformed `<span>...</title>` tag that
+    -- causes tagsoup to choke.  this converts all </title> except for the
+    -- first one to be <span>.
+    cleanDoubleTitle :: Text -> Text
+    cleanDoubleTitle t = case T.splitOn "</title>" t of
+        x:xs -> x <> "</title>" <> T.intercalate "</span>" xs
+        []   -> ""      -- this shouldn't ever happen because splitOn is always non-empty
 
 -- | Parse 'Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
