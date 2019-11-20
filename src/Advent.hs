@@ -337,7 +337,7 @@ saverLoader :: AoC a -> SaverLoader (Either AoCError a)
 saverLoader = \case
     AoCPrompt d -> SL { _slSave = either (const Nothing) (Just . encodeMap)
                       , _slLoad = \str ->
-                          let mp = decodeMap str
+                          let mp     = decodeMap str
                               hasAll = S.null (expectedParts d `S.difference` M.keysSet mp)
                           in  Right mp <$ guard hasAll
                       }
@@ -349,8 +349,8 @@ saverLoader = \case
   where
     expectedParts :: Day -> Set Part
     expectedParts d
-      | d == maxBound = S.singleton Part1
-      | otherwise     = S.fromDistinctAscList [Part1 ..]
+      | dayFinite d == maxBound = S.singleton Part1
+      | otherwise               = S.fromDistinctAscList [Part1 ..]
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp
