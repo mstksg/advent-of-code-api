@@ -171,6 +171,10 @@ data AoC :: Type -> Type where
     AoCLeaderboard
         :: Integer
         -> AoC Leaderboard
+    
+    AoCDailyLeaderboard
+        :: Day
+        -> AoC DailyLeaderboard
 
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
@@ -181,6 +185,7 @@ aocDay (AoCPrompt d     ) = Just d
 aocDay (AoCInput  d     ) = Just d
 aocDay (AoCSubmit d _ _ ) = Just d
 aocDay (AoCLeaderboard _) = Nothing
+aocDay (AoCDailyLeaderboard d) = Just d
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
@@ -259,8 +264,10 @@ aocReq yr = \case
     AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient yr i in r
     AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient yr i
                          in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
-    AoCLeaderboard c  -> let _ :<|> r = adventAPIClient yr
+    AoCLeaderboard c  -> let _ :<|> _ :<|> r = adventAPIClient yr
                          in  r (PublicCode c)
+    AoCDailyLeaderboard d -> let _ :<|> r :<|> _ = adventAPIClient yr
+                             in  r d
 
 
 -- | Cache file for a given 'AoC' command
@@ -274,6 +281,7 @@ apiCache sess yr = \case
     AoCInput  d      -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
     AoCSubmit{}      -> Nothing
     AoCLeaderboard{} -> Nothing
+    AoCDailyLeaderboard{} -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
@@ -346,6 +354,7 @@ saverLoader = \case
                       }
     AoCSubmit{} -> noCache
     AoCLeaderboard{} -> noCache
+    AoCDailyLeaderboard{} -> noCache
   where
     expectedParts :: Day -> Set Part
     expectedParts d

@@ -1,12 +1,17 @@
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 -- |
 -- Module      : Advent.API
@@ -37,6 +42,8 @@ module Advent.API (
   , PublicCode(..)
   , Leaderboard(..)
   , LeaderboardMember(..)
+  , DailyLeaderboard(..)
+  , DailyLeaderboardMember(..)
   -- * Servant API
   , AdventAPI
   , adventAPI
@@ -48,9 +55,12 @@ module Advent.API (
   , partChar
   -- * Internal
   , processHTML
+  , processDivs
   , parseSubmitRes
+  , HTMLTags
+  , FromTags(..)
   , Articles
-  , FromArticles(..)
+  , Divs
   , RawText
   ) where
 
@@ -69,9 +79,13 @@ import           Data.Proxy
 import           Data.Text                  (Text)
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
+import           Data.Time.Format
+import           Data.Time.LocalTime
 import           Data.Typeable
 import           Data.Void
+import           Debug.Trace
 import           GHC.Generics
+import           GHC.TypeLits
 import           Servant.API
 import           Servant.Client
 import           Text.HTML.TagSoup.Tree     (TagTree(..))
@@ -79,6 +93,7 @@ import           Text.Printf
 import           Text.Read                  (readMaybe)
 import qualified Data.ByteString.Lazy       as BSL
 import qualified Data.Map                   as M
+import qualified Data.Set                   as S
 import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
 import qualified Network.HTTP.Media         as M
@@ -170,6 +185,23 @@ data LeaderboardMember = LBM
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | Single daily leaderboard position
+data DailyLeaderboardMember = DLBM
+    { dlbmRank      :: Finite 100
+    , dlbmTime      :: UTCTime
+    , dlbmUser      :: Either Integer Text
+    , dlbmLink      :: Maybe Text
+    , dlbmImage     :: Maybe Text
+    , dlbmSupporter :: Bool
+    }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
+data DailyLeaderboard = DLB {
+    dlbStar1 :: Map (Finite 100) DailyLeaderboardMember
+  , dlbStar2 :: Map (Finite 100) DailyLeaderboardMember
+  }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
 instance ToHttpApiData Part where
     toUrlPiece = T.pack . show . partInt
     toQueryParam = toUrlPiece
@@ -195,37 +227,93 @@ instance Accept RawText where
 instance MimeUnrender RawText Text where
     mimeUnrender _ = first show . T.decodeUtf8' . BSL.toStrict
 
--- | Interpret repsonse as a list of HTML 'Text' in @<article>@ tags.
-data Articles
+-- | Interpret repsonse as a list of HTML 'Text' in the given type of tag
+data HTMLTags (tag :: Symbol)
 
--- | Class for interpreting a list of 'Text' in article tags to some
--- desired output.
-class FromArticles a where
-    fromArticles :: [Text] -> a
+type Articles = HTMLTags "article"
+type Divs     = HTMLTags "div"
 
-instance Accept Articles where
+-- | Class for interpreting a list of 'Text' in tags to some desired
+-- output.
+class FromTags tag a where
+    fromTags :: p tag -> [Text] -> Maybe a
+
+instance Accept (HTMLTags cls) where
     contentType _ = "text" M.// "html"
 
-instance FromArticles a => MimeUnrender Articles a where
-    mimeUnrender _ = fmap fromArticles
-                   . bimap show processHTML
-                   . T.decodeUtf8'
-                   . BSL.toStrict
+instance (FromTags tag a, KnownSymbol tag) => MimeUnrender (HTMLTags tag) a where
+    mimeUnrender _ str = do
+      x <- first show . T.decodeUtf8' . BSL.toStrict $ str
+      maybe (Left "No parse") pure
+         . fromTags (Proxy @tag)
+         . processHTML (symbolVal (Proxy @tag))
+         $ x
 
-instance FromArticles [Text] where
-    fromArticles = id
+instance FromTags cls [Text] where
+    fromTags _ = Just
 
-instance FromArticles Text where
-    fromArticles = T.unlines
+instance FromTags cls Text where
+    fromTags _ = Just . T.unlines
 
-instance (Ord a, Enum a, Bounded a) => FromArticles (Map a Text) where
-    fromArticles = M.fromList . zip [minBound ..]
+instance (Ord a, Enum a, Bounded a) => FromTags cls (Map a Text) where
+    fromTags _ = Just . M.fromList . zip [minBound ..]
 
-instance (FromArticles a, FromArticles b) => FromArticles (a :<|> b) where
-    fromArticles xs = fromArticles xs :<|> fromArticles xs
+instance (FromTags cls a, FromTags cls b) => FromTags cls (a :<|> b) where
+    fromTags p xs = (:<|>) <$> fromTags p xs <*> fromTags p xs
 
-instance FromArticles SubmitRes where
-    fromArticles = parseSubmitRes . fold  . listToMaybe
+instance FromTags "article" SubmitRes where
+    fromTags _ = Just . parseSubmitRes . fold  . listToMaybe
+
+instance FromTags "div" DailyLeaderboard where
+    fromTags _ = Just . assembleDLB . mapMaybe parseMember
+      where
+        parseMember :: Text -> Maybe DailyLeaderboardMember
+        parseMember contents = do
+            dlbmRank <- packFinite . subtract 1
+                    =<< readMaybe . filter isDigit . T.unpack . fst
+                    =<< findTag "span" (Just "leaderboard-position")
+            dlbmTime <- fmap (localTimeToUTC (read "EST"))
+                      . parseTimeM True defaultTimeLocale "%b %d  %H:%M:%S"
+                      . T.unpack . fst
+                    =<< findTag "span" (Just "leaderboard-time")
+            dlbmUser <- asum [
+                Right <$> userNameNaked tr
+              , fmap Right $ userNameNaked . H.parseTree . fst
+                         =<< findTag "a" Nothing
+              , fmap Left  $ readMaybe . filter isDigit . T.unpack . fst
+                         =<< findTag "span" (Just "leaderboard-anon")
+              ]
+            pure DLBM{..}
+          where
+            dlbmLink      = lookup "href" . snd =<< findTag "a" Nothing
+            dlbmSupporter = "AoC++" `T.isInfixOf` contents
+            dlbmImage     = lookup "src" . snd =<< findTag "img" Nothing
+            userNameNaked = (listToMaybe .) . mapMaybe $ \x -> do
+              TagLeaf (H.TagText (T.strip->u)) <- Just x
+              guard . not $ T.null u
+              pure u
+            tr  = H.parseTree contents
+            uni = H.universeTree tr
+            findTag :: Text -> Maybe Text -> Maybe (Text, [H.Attribute Text])
+            findTag tag cls = listToMaybe . flip mapMaybe uni $ \x -> do
+              TagBranch tag' attr cld <- Just x
+              guard $ tag' == tag
+              forM_ cls $ \c -> guard $ ("class", c) `elem` attr
+              pure (H.renderTree cld, attr)
+        assembleDLB = flipper . snd . foldl' (uncurry go) (Nothing, DLB M.empty M.empty)
+          where
+            flipper dlb@(DLB a b)
+              | M.null a  = DLB b a
+              | otherwise = dlb
+            go counter dlb m@DLBM{..} = case counter of
+                Nothing      -> dlb2
+                Just Nothing -> dlb1
+                Just (Just i)
+                  | dlbmRank <= i -> dlb1
+                  | otherwise     -> dlb2
+              where
+                dlb1 = (Just Nothing        , dlb { dlbStar1 = M.insert dlbmRank m (dlbStar1 dlb) })
+                dlb2 = (Just (Just dlbmRank), dlb { dlbStar2 = M.insert dlbmRank m (dlbStar2 dlb) })
 
 instance FromJSON Leaderboard where
     parseJSON = withObject "Leaderboard" $ \o ->
@@ -288,9 +376,13 @@ type AdventAPI =
                      :> ReqBody '[FormUrlEncoded] SubmitInfo
                      :> Post    '[Articles] (Text :<|> SubmitRes)
                 )
-  :<|> "leaderboard" :> "private" :> "view"
-                     :> Capture "code" PublicCode
-                     :> Get '[JSON] Leaderboard
+  :<|> "leaderboard"
+    :> ("day" :> Capture "day" Day :> Get '[Divs] DailyLeaderboard
+   :<|> "private" :> "view"
+                  :> Capture "code" PublicCode
+                  :> Get '[JSON] Leaderboard
+
+       )
       )
 
 -- | 'Proxy' used for /servant/ functions.
@@ -301,6 +393,7 @@ adventAPI = Proxy
 adventAPIClient
     :: Integer
     -> (Day -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes)) )
+  :<|> (Day -> ClientM DailyLeaderboard)
   :<|> (PublicCode -> ClientM Leaderboard)
 adventAPIClient = client adventAPI
 
@@ -314,17 +407,20 @@ adventAPIPuzzleClient y = pis
   where
     pis :<|> _ = adventAPIClient y
 
--- | Process an HTML webpage into a list of all contents in <article>s
-processHTML :: Text -> [Text]
-processHTML = map H.renderTree
-            . mapMaybe isArticle
-            . H.universeTree
-            . H.parseTree
-            . cleanDoubleTitle
+-- | Process an HTML webpage into a list of all contents in the given tag
+-- type
+processHTML
+    :: String       -- ^ tag type
+    -> Text         -- ^ html
+    -> [Text]
+processHTML tag = mapMaybe getTag
+               . H.universeTree
+               . H.parseTree
+               . cleanDoubleTitle
   where
-    isArticle :: TagTree Text -> Maybe [TagTree Text]
-    isArticle (TagBranch n _ ts) = ts <$ guard (n == "article")
-    isArticle _                  = Nothing
+    getTag :: TagTree Text -> Maybe Text
+    getTag (TagBranch n _ ts) = H.renderTree ts <$ guard (n == T.pack tag)
+    getTag _                  = Nothing
     -- 2016 Day 2 Part 2 has a malformed `<span>...</title>` tag that
     -- causes tagsoup to choke.  this converts all </title> except for the
     -- first one to be <span>.
@@ -332,6 +428,18 @@ processHTML = map H.renderTree
     cleanDoubleTitle t = case T.splitOn "</title>" t of
         x:xs -> x <> "</title>" <> T.intercalate "</span>" xs
         []   -> ""      -- this shouldn't ever happen because splitOn is always non-empty
+
+processDivs :: String -> Text -> [Text]
+processDivs cls = mapMaybe isDiv
+                . H.universeTree
+                . H.parseTree
+  where
+    isDiv :: TagTree Text -> Maybe Text
+    isDiv (TagBranch n attrs cld)
+      | n == "div"
+      , ("class", T.pack cls) `elem` attrs
+      = Just $ H.renderTree cld
+    isDiv _ = Nothing
 
 -- | Parse 'Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
