@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -8,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE TypeOperators              #-}
@@ -42,8 +44,11 @@ module Advent.API (
   , PublicCode(..)
   , Leaderboard(..)
   , LeaderboardMember(..)
+  , Rank(..)
   , DailyLeaderboard(..)
   , DailyLeaderboardMember(..)
+  , GlobalLeaderboard(..)
+  , GlobalLeaderboardMember(..)
   -- * Servant API
   , AdventAPI
   , adventAPI
@@ -64,17 +69,20 @@ module Advent.API (
   , RawText
   ) where
 
--- import qualified Data.Attoparsec.Text    as P
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.State
 import           Data.Aeson
+import           Data.Aeson.Types
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Finite
 import           Data.Foldable
 import           Data.Functor.Classes
+import           Data.List.NonEmpty         (NonEmpty(..))
 import           Data.Map                   (Map)
 import           Data.Maybe
+import           Data.Ord
 import           Data.Proxy
 import           Data.Text                  (Text)
 import           Data.Time.Clock
@@ -83,7 +91,6 @@ import           Data.Time.Format
 import           Data.Time.LocalTime
 import           Data.Typeable
 import           Data.Void
-import           Debug.Trace
 import           GHC.Generics
 import           GHC.TypeLits
 import           Servant.API
@@ -92,8 +99,8 @@ import           Text.HTML.TagSoup.Tree     (TagTree(..))
 import           Text.Printf
 import           Text.Read                  (readMaybe)
 import qualified Data.ByteString.Lazy       as BSL
+import qualified Data.List.NonEmpty         as NE
 import qualified Data.Map                   as M
-import qualified Data.Set                   as S
 import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
 import qualified Network.HTTP.Media         as M
@@ -185,9 +192,13 @@ data LeaderboardMember = LBM
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | Ranking between 1 to 100, for daily and global leaderboards
+newtype Rank = Rank { getRank :: Finite 100 }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
 -- | Single daily leaderboard position
 data DailyLeaderboardMember = DLBM
-    { dlbmRank      :: Finite 100
+    { dlbmRank      :: Rank
     , dlbmTime      :: UTCTime
     , dlbmUser      :: Either Integer Text
     , dlbmLink      :: Maybe Text
@@ -197,10 +208,27 @@ data DailyLeaderboardMember = DLBM
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 data DailyLeaderboard = DLB {
-    dlbStar1 :: Map (Finite 100) DailyLeaderboardMember
-  , dlbStar2 :: Map (Finite 100) DailyLeaderboardMember
+    dlbStar1 :: Map Rank DailyLeaderboardMember
+  , dlbStar2 :: Map Rank DailyLeaderboardMember
   }
   deriving (Show, Eq, Ord, Typeable, Generic)
+
+-- | Single global leaderboard position
+data GlobalLeaderboardMember = GLBM
+    { glbmRank      :: Rank
+    , glbmScore     :: Integer
+    , glbmUser      :: Either Integer Text
+    , glbmLink      :: Maybe Text
+    , glbmImage     :: Maybe Text
+    , glbmSupporter :: Bool
+    }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
+newtype GlobalLeaderboard = GLB {
+    glbMap :: Map Rank (Integer, NonEmpty GlobalLeaderboardMember)
+  }
+  deriving (Show, Eq, Ord, Typeable, Generic)
+
 
 instance ToHttpApiData Part where
     toUrlPiece = T.pack . show . partInt
@@ -269,37 +297,21 @@ instance FromTags "div" DailyLeaderboard where
       where
         parseMember :: Text -> Maybe DailyLeaderboardMember
         parseMember contents = do
-            dlbmRank <- packFinite . subtract 1
+            dlbmRank <- fmap Rank . packFinite . subtract 1
                     =<< readMaybe . filter isDigit . T.unpack . fst
-                    =<< findTag "span" (Just "leaderboard-position")
+                    =<< findTag uni "span" (Just "leaderboard-position")
             dlbmTime <- fmap (localTimeToUTC (read "EST"))
                       . parseTimeM True defaultTimeLocale "%b %d  %H:%M:%S"
                       . T.unpack . fst
-                    =<< findTag "span" (Just "leaderboard-time")
-            dlbmUser <- asum [
-                Right <$> userNameNaked tr
-              , fmap Right $ userNameNaked . H.parseTree . fst
-                         =<< findTag "a" Nothing
-              , fmap Left  $ readMaybe . filter isDigit . T.unpack . fst
-                         =<< findTag "span" (Just "leaderboard-anon")
-              ]
+                    =<< findTag uni "span" (Just "leaderboard-time")
+            dlbmUser <- eitherUser tr
             pure DLBM{..}
           where
-            dlbmLink      = lookup "href" . snd =<< findTag "a" Nothing
+            dlbmLink      = lookup "href" . snd =<< findTag uni "a" Nothing
             dlbmSupporter = "AoC++" `T.isInfixOf` contents
-            dlbmImage     = lookup "src" . snd =<< findTag "img" Nothing
-            userNameNaked = (listToMaybe .) . mapMaybe $ \x -> do
-              TagLeaf (H.TagText (T.strip->u)) <- Just x
-              guard . not $ T.null u
-              pure u
+            dlbmImage     = lookup "src" . snd =<< findTag uni "img" Nothing
             tr  = H.parseTree contents
             uni = H.universeTree tr
-            findTag :: Text -> Maybe Text -> Maybe (Text, [H.Attribute Text])
-            findTag tag cls = listToMaybe . flip mapMaybe uni $ \x -> do
-              TagBranch tag' attr cld <- Just x
-              guard $ tag' == tag
-              forM_ cls $ \c -> guard $ ("class", c) `elem` attr
-              pure (H.renderTree cld, attr)
         assembleDLB = flipper . snd . foldl' (uncurry go) (Nothing, DLB M.empty M.empty)
           where
             flipper dlb@(DLB a b)
@@ -314,6 +326,36 @@ instance FromTags "div" DailyLeaderboard where
               where
                 dlb1 = (Just Nothing        , dlb { dlbStar1 = M.insert dlbmRank m (dlbStar1 dlb) })
                 dlb2 = (Just (Just dlbmRank), dlb { dlbStar2 = M.insert dlbmRank m (dlbStar2 dlb) })
+
+instance FromTags "div" GlobalLeaderboard where
+    fromTags _ = Just . GLB . reScore . M.fromListWith (<>)
+               . map (\x -> (Down (glbmScore x), x :| []))
+               . mapMaybe parseMember
+      where
+        parseMember :: Text -> Maybe GlobalLeaderboardMember
+        parseMember contents = do
+            glbmScore <- readMaybe . filter isDigit . T.unpack . fst
+                     =<< findTag uni "span" (Just "leaderboard-totalscore")
+            glbmUser <- eitherUser tr
+            pure GLBM{..}
+          where
+            glbmRank      = Rank 0
+            glbmLink      = lookup "href" . snd =<< findTag uni "a" Nothing
+            glbmSupporter = "AoC++" `T.isInfixOf` contents
+            glbmImage     = lookup "src" . snd =<< findTag uni "img" Nothing
+            tr  = H.parseTree contents
+            uni = H.universeTree tr
+        reScore = fmap (\xs -> (glbmScore (NE.head xs), xs))
+                . M.fromList
+                . flip evalState 0
+                . traverse go
+                . toList
+          where
+            go xs = do
+              currScore <- get
+              xs' <- forM xs $ \x -> x { glbmRank = Rank currScore } <$ modify succ
+              pure (Rank currScore, xs')
+
 
 instance FromJSON Leaderboard where
     parseJSON = withObject "Leaderboard" $ \o ->
@@ -362,6 +404,48 @@ instance FromJSON Day where
           Nothing -> fail "Day out of range"
           Just d  -> pure d
 
+instance ToJSONKey Rank where
+    toJSONKey = toJSONKeyText $ T.pack . show . (+ 1) . getFinite . getRank
+instance FromJSONKey Rank where
+    fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+
+instance ToJSON Rank where
+    toJSON = String . T.pack . show . (+ 1) . getFinite . getRank
+instance FromJSON Rank where
+    parseJSON = withText "Rank" $ \t ->
+      case readMaybe (T.unpack t) of
+        Nothing -> fail "No read rank"
+        Just i  -> case packFinite (i - 1) of
+          Nothing -> fail "Rank out of range"
+          Just d  -> pure $ Rank d
+
+instance ToJSON DailyLeaderboard where
+    toJSON = genericToJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+instance FromJSON DailyLeaderboard where
+    parseJSON = genericParseJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+
+instance ToJSON GlobalLeaderboard where
+    toJSON = genericToJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+instance FromJSON GlobalLeaderboard where
+    parseJSON = genericParseJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+
+instance ToJSON DailyLeaderboardMember where
+    toJSON = genericToJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+instance FromJSON DailyLeaderboardMember where
+    parseJSON = genericParseJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+
+instance ToJSON GlobalLeaderboardMember where
+    toJSON = genericToJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+instance FromJSON GlobalLeaderboardMember where
+    parseJSON = genericParseJSON defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4 }
 
 
 -- | REST API of Advent of Code.
@@ -377,7 +461,8 @@ type AdventAPI =
                      :> Post    '[Articles] (Text :<|> SubmitRes)
                 )
   :<|> "leaderboard"
-    :> ("day" :> Capture "day" Day :> Get '[Divs] DailyLeaderboard
+    :> (Get '[Divs] GlobalLeaderboard
+   :<|> "day"     :> Capture "day" Day :> Get '[Divs] DailyLeaderboard
    :<|> "private" :> "view"
                   :> Capture "code" PublicCode
                   :> Get '[JSON] Leaderboard
@@ -393,6 +478,7 @@ adventAPI = Proxy
 adventAPIClient
     :: Integer
     -> (Day -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes)) )
+  :<|> ClientM GlobalLeaderboard
   :<|> (Day -> ClientM DailyLeaderboard)
   :<|> (PublicCode -> ClientM Leaderboard)
 adventAPIClient = client adventAPI
@@ -527,3 +613,24 @@ partChar :: Part -> Char
 partChar Part1 = 'a'
 partChar Part2 = 'b'
 
+userNameNaked :: [TagTree Text] -> Maybe Text
+userNameNaked = (listToMaybe .) . mapMaybe $ \x -> do
+  TagLeaf (H.TagText (T.strip->u)) <- Just x
+  guard . not $ T.null u
+  pure u
+findTag :: [TagTree Text] -> Text -> Maybe Text -> Maybe (Text, [H.Attribute Text])
+findTag uni tag cls = listToMaybe . flip mapMaybe uni $ \x -> do
+  TagBranch tag' attr cld <- Just x
+  guard $ tag' == tag
+  forM_ cls $ \c -> guard $ ("class", c) `elem` attr
+  pure (H.renderTree cld, attr)
+eitherUser :: [TagTree Text] -> Maybe (Either Integer Text)
+eitherUser tr = asum [
+      Right <$> userNameNaked tr
+    , fmap Right $ userNameNaked . H.parseTree . fst
+               =<< findTag uni "a" Nothing
+    , fmap Left  $ readMaybe . filter isDigit . T.unpack . fst
+               =<< findTag uni "span" (Just "leaderboard-anon")
+    ]
+  where
+    uni = H.universeTree tr

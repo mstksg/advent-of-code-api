@@ -92,10 +92,13 @@ import           Servant.Client
 import           System.Directory
 import           System.FilePath
 import           Text.Printf
+import qualified Data.Aeson              as A
 import qualified Data.Map                as M
 import qualified Data.Set                as S
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
+import qualified Data.Text.Lazy.Encoding as TL
+import qualified Data.Text.Lazy          as TL
 import qualified System.IO.Unsafe        as Unsafe
 
 #if MIN_VERSION_base(4,11,0)
@@ -171,10 +174,33 @@ data AoC :: Type -> Type where
     AoCLeaderboard
         :: Integer
         -> AoC Leaderboard
-    
+
+    -- | Fetch the daily leaderboard for a given day.  Does not require
+    -- a session key.
+    --
+    -- Leaderboard API calls tend to be expensive, so please be respectful
+    -- when using this.  If you automate this, please do not fetch any more
+    -- often than necessary.
+    --
+    -- Calls to this will be cached if a full leaderboard is observed.
+    --
+    -- @since 0.2.3.0
     AoCDailyLeaderboard
         :: Day
         -> AoC DailyLeaderboard
+
+    -- | Fetch the global leaderboard.  Does not require
+    -- a session key.
+    --
+    -- Leaderboard API calls tend to be expensive, so please be respectful
+    -- when using this.  If you automate this, please do not fetch any more
+    -- often than necessary.
+    --
+    -- Calls to this will be cached if fetched after each event ends.
+    --
+    -- @since 0.2.3.0
+    AoCGlobalLeaderboard
+        :: AoC GlobalLeaderboard
 
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
@@ -186,6 +212,7 @@ aocDay (AoCInput  d     ) = Just d
 aocDay (AoCSubmit d _ _ ) = Just d
 aocDay (AoCLeaderboard _) = Nothing
 aocDay (AoCDailyLeaderboard d) = Just d
+aocDay AoCGlobalLeaderboard = Nothing
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
@@ -264,10 +291,12 @@ aocReq yr = \case
     AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient yr i in r
     AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient yr i
                          in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
-    AoCLeaderboard c  -> let _ :<|> _ :<|> r = adventAPIClient yr
+    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> r = adventAPIClient yr
                          in  r (PublicCode c)
-    AoCDailyLeaderboard d -> let _ :<|> r :<|> _ = adventAPIClient yr
+    AoCDailyLeaderboard d -> let _ :<|> _ :<|> r :<|> _ = adventAPIClient yr
                              in  r d
+    AoCGlobalLeaderboard  -> let _ :<|> r :<|> _ :<|> _ = adventAPIClient yr
+                             in  r
 
 
 -- | Cache file for a given 'AoC' command
@@ -281,7 +310,8 @@ apiCache sess yr = \case
     AoCInput  d      -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
     AoCSubmit{}      -> Nothing
     AoCLeaderboard{} -> Nothing
-    AoCDailyLeaderboard{} -> Nothing
+    AoCDailyLeaderboard d -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
+    AoCGlobalLeaderboard{} -> Just $ printf "global/%04d.json" yr
   where
     keyDir = case sess of
       Nothing -> ""
@@ -299,12 +329,18 @@ runAoC AoCOpts{..} a = do
       Just c  -> pure (Nothing, c)
       Nothing -> (Just _aSessionKey,) . (</> "advent-of-code-api") <$> getTemporaryDirectory
 
-    let cacher = case apiCache keyMayb _aYear a of
+    (yy,mm,dd) <- toGregorian
+                . localDay
+                . utcToLocalTime (read "EST")
+              <$> getCurrentTime
+    let eventOver = yy > _aYear
+                 || (mm == 12 && dd > 25)
+        cacher = case apiCache keyMayb _aYear a of
           Nothing -> id
           Just fp -> cacheing (cacheDir </> fp) $
                        if _aForce
                          then noCache
-                         else saverLoader a
+                         else saverLoader (not eventOver) a
 
     cacher . runExceptT $ do
       forM_ (aocDay a) $ \d -> do
@@ -341,8 +377,11 @@ aocClientEnv s = do
     oneYear = 60 * 60 * 24 * 356.25
 
 
-saverLoader :: AoC a -> SaverLoader (Either AoCError a)
-saverLoader = \case
+saverLoader
+    :: Bool             -- ^ is the event ongoing (True) or over (False)?
+    -> AoC a
+    -> SaverLoader (Either AoCError a)
+saverLoader evt = \case
     AoCPrompt d -> SL { _slSave = either (const Nothing) (Just . encodeMap)
                       , _slLoad = \str ->
                           let mp     = decodeMap str
@@ -354,12 +393,29 @@ saverLoader = \case
                       }
     AoCSubmit{} -> noCache
     AoCLeaderboard{} -> noCache
-    AoCDailyLeaderboard{} -> noCache
+    AoCDailyLeaderboard d -> SL
+        { _slSave = either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8 . A.encode)
+        , _slLoad = \str -> do
+            r <- A.decode . TL.encodeUtf8 . TL.fromStrict $ str
+            let l = M.size (dlbStar1 r) + M.size (dlbStar2 r)
+            guard $ l >= fullLength d
+            pure $ Right r
+        }
+    AoCGlobalLeaderboard{}
+      | evt       -> noCache
+      | otherwise -> SL
+          { _slSave = either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8 . A.encode)
+          , _slLoad = fmap Right . A.decode . TL.encodeUtf8 . TL.fromStrict
+          }
   where
     expectedParts :: Day -> Set Part
     expectedParts d
       | d == maxBound = S.singleton Part1
       | otherwise     = S.fromDistinctAscList [Part1 ..]
+    fullLength :: Day -> Int
+    fullLength d
+      | d == maxBound = 100
+      | otherwise     = 200
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp
