@@ -173,6 +173,7 @@ data DailyLeaderboardMember = DLBM
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | Daily leaderboard, containing Star 1 and Star 2 completions
 data DailyLeaderboard = DLB {
     dlbStar1 :: Map Rank DailyLeaderboardMember
   , dlbStar2 :: Map Rank DailyLeaderboardMember
@@ -190,6 +191,7 @@ data GlobalLeaderboardMember = GLBM
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | Global leaderboard for the entire event
 newtype GlobalLeaderboard = GLB {
     glbMap :: Map Rank (Integer, NonEmpty GlobalLeaderboardMember)
   }

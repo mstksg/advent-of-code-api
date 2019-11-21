@@ -49,7 +49,6 @@ module Advent.API (
   , RawText
   -- * Internal
   , processHTML
-  , processDivs
   ) where
 
 import           Advent.Types
@@ -94,10 +93,14 @@ instance Accept RawText where
 instance MimeUnrender RawText Text where
     mimeUnrender _ = first show . T.decodeUtf8' . BSL.toStrict
 
--- | Interpret repsonse as a list of HTML 'Text' in the given type of tag
+-- | Interpret repsonse as a list of HTML 'Text' found in the given type of
+-- tag
 data HTMLTags (tag :: Symbol)
 
+-- | Interpret a response as a list of HTML 'Text' found in @<article>@ tags.
 type Articles = HTMLTags "article"
+
+-- | Interpret a response as a list of HTML 'Text' found in @<div>@ tags.
 type Divs     = HTMLTags "div"
 
 -- | Class for interpreting a list of 'Text' in tags to some desired
@@ -285,16 +288,4 @@ processHTML tag = mapMaybe getTag
     cleanDoubleTitle t = case T.splitOn "</title>" t of
         x:xs -> x <> "</title>" <> T.intercalate "</span>" xs
         []   -> ""      -- this shouldn't ever happen because splitOn is always non-empty
-
-processDivs :: String -> Text -> [Text]
-processDivs cls = mapMaybe isDiv
-                . H.universeTree
-                . H.parseTree
-  where
-    isDiv :: TagTree Text -> Maybe Text
-    isDiv (TagBranch n attrs cld)
-      | n == "div"
-      , ("class", T.pack cls) `elem` attrs
-      = Just $ H.renderTree cld
-    isDiv _ = Nothing
 
