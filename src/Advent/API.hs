@@ -93,21 +93,21 @@ instance Accept RawText where
 instance MimeUnrender RawText Text where
     mimeUnrender _ = first show . T.decodeUtf8' . BSL.toStrict
 
--- | Interpret repsonse as a list of HTML 'Text' found in the given type of
+-- | Interpret repsonse as a list of HTML 'T.Text' found in the given type of
 -- tag
 --
 -- @since 0.2.3.0
 data HTMLTags (tag :: Symbol)
 
--- | Interpret a response as a list of HTML 'Text' found in @<article>@ tags.
+-- | Interpret a response as a list of HTML 'T.Text' found in @<article>@ tags.
 type Articles = HTMLTags "article"
 
--- | Interpret a response as a list of HTML 'Text' found in @<div>@ tags.
+-- | Interpret a response as a list of HTML 'T.Text' found in @<div>@ tags.
 --
 -- @since 0.2.3.0
 type Divs     = HTMLTags "div"
 
--- | Class for interpreting a list of 'Text' in tags to some desired
+-- | Class for interpreting a list of 'T.Text' in tags to some desired
 -- output.
 --
 -- @since 0.2.3.0

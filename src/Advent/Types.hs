@@ -320,7 +320,7 @@ instance FromJSON GlobalLeaderboardMember where
     parseJSON = genericParseJSON defaultOptions
         { fieldLabelModifier = camelTo2 '-' . drop 4 }
 
--- | Parse 'Text' into a 'SubmitRes'.
+-- | Parse 'T.Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
 parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
                . P.runParser choices "Submission Response"
