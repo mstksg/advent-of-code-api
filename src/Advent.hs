@@ -5,6 +5,7 @@
 {-# LANGUAGE KindSignatures     #-}
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE PatternSynonyms    #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
@@ -59,7 +60,7 @@ module Advent (
   , challengeReleased
   -- * Utility
   -- ** Day
-  , mkDay, mkDay_, dayInt
+  , mkDay, mkDay_, dayInt, pattern DayInt, _DayInt
   , aocDay
   -- ** Part
   , partChar, partInt
