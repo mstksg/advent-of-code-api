@@ -8,8 +8,8 @@ Version 0.2.3.0
 
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.3.0>
 
-*   Add API commands for daily and global leaderboards
-*   Move some of the data types to be in their own module
+*   Add API commands for daily and global leaderboards.
+*   Move some of the data types to be in their own module, *Advent.Types*.
 
 Version 0.2.2.1
 ---------------

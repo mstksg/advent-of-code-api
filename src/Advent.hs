@@ -50,7 +50,6 @@ module Advent (
   , Day(..)
   , AoCOpts(..)
   , SubmitRes(..), showSubmitRes
-  , Leaderboard(..), LeaderboardMember(..)
   , runAoC
   , defaultAoCOpts
   , AoCError(..)
@@ -74,6 +73,7 @@ module Advent (
 import           Advent.API
 import           Advent.Cache
 import           Advent.Throttle
+import           Advent.Types
 import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad.Except
@@ -97,8 +97,8 @@ import qualified Data.Map                as M
 import qualified Data.Set                as S
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
-import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Text.Lazy          as TL
+import qualified Data.Text.Lazy.Encoding as TL
 import qualified System.IO.Unsafe        as Unsafe
 
 #if MIN_VERSION_base(4,11,0)

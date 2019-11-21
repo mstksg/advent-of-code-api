@@ -35,8 +35,9 @@ throttling) are in *Advent*.
 Session Keys
 ------------
 
-Session keys are required for all commands, but if you enter a bogus key
-you should be able to get at least Part 1 from `AoCPrompt`.
+Session keys are required for most commands, but if you enter a bogus key
+you should be able to get at least Part 1 from `AoCPrompt`.  Session keys are
+also not needed for daily and global leaderboards.
 
 The session key can be found by logging in on a web client and checking
 the cookies.  You can usually check these with in-browser developer
