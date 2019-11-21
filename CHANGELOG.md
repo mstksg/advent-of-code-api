@@ -9,6 +9,9 @@ Version 0.2.3.0
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.3.0>
 
 *   Add API commands for daily and global leaderboards.
+*   In the process, the Servant API is reshuffled a bit: `Articles` has been
+    generalized to `HTMLTags "article"`, to also support `HTMLTags "div"`.
+    `FromArticle` is now `FromTags "article"`.
 *   Move some of the data types to be in their own module, *Advent.Types*.
 
 Version 0.2.2.1

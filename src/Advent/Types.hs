@@ -159,10 +159,17 @@ data LeaderboardMember = LBM
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Ranking between 1 to 100, for daily and global leaderboards
+--
+-- Note that 'getRank' interanlly stores a number from 0 to 99, so be sure
+-- to add or subtract accordingly if you want to display or parse it.
+--
+-- @since 0.2.3.0
 newtype Rank = Rank { getRank :: Finite 100 }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Single daily leaderboard position
+--
+-- @since 0.2.3.0
 data DailyLeaderboardMember = DLBM
     { dlbmRank      :: Rank
     , dlbmTime      :: UTCTime
@@ -174,6 +181,8 @@ data DailyLeaderboardMember = DLBM
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Daily leaderboard, containing Star 1 and Star 2 completions
+--
+-- @since 0.2.3.0
 data DailyLeaderboard = DLB {
     dlbStar1 :: Map Rank DailyLeaderboardMember
   , dlbStar2 :: Map Rank DailyLeaderboardMember
@@ -181,6 +190,8 @@ data DailyLeaderboard = DLB {
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Single global leaderboard position
+--
+-- @since 0.2.3.0
 data GlobalLeaderboardMember = GLBM
     { glbmRank      :: Rank
     , glbmScore     :: Integer
@@ -192,6 +203,11 @@ data GlobalLeaderboardMember = GLBM
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Global leaderboard for the entire event
+--
+-- Under each 'Rank' is an 'Integer' for the score at that rank, as well as
+-- a non-empty list of all members who achieved that rank and score.
+--
+-- @since 0.2.3.0
 newtype GlobalLeaderboard = GLB {
     glbMap :: Map Rank (Integer, NonEmpty GlobalLeaderboardMember)
   }

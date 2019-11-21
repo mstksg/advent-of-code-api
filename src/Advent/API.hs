@@ -95,16 +95,22 @@ instance MimeUnrender RawText Text where
 
 -- | Interpret repsonse as a list of HTML 'Text' found in the given type of
 -- tag
+--
+-- @since 0.2.3.0
 data HTMLTags (tag :: Symbol)
 
 -- | Interpret a response as a list of HTML 'Text' found in @<article>@ tags.
 type Articles = HTMLTags "article"
 
 -- | Interpret a response as a list of HTML 'Text' found in @<div>@ tags.
+--
+-- @since 0.2.3.0
 type Divs     = HTMLTags "div"
 
 -- | Class for interpreting a list of 'Text' in tags to some desired
 -- output.
+--
+-- @since 0.2.3.0
 class FromTags tag a where
     fromTags :: p tag -> [Text] -> Maybe a
 
