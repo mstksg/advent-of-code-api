@@ -1,6 +1,18 @@
 Changelog
 =========
 
+Version 0.2.4.0
+---------------
+
+*November 21, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.4.0>
+
+*   Fixed caching behavior and documentation to reflect that Day 25 actually
+    does have 2 stars, like normal.
+*   Some extra smart constructors for moving between `Day` and `Integer`, in
+    the form of a `Prism` and a pattern synonym.
+
 Version 0.2.3.0
 ---------------
 

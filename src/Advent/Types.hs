@@ -2,15 +2,13 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TupleSections              #-}
-{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE ViewPatterns               #-}
@@ -45,8 +43,10 @@ module Advent.Types (
   , GlobalLeaderboardMember(..)
   -- * Util
   , mkDay, mkDay_, dayInt
+  , _DayInt, pattern DayInt
   , partInt
   , partChar
+  , fullDailyBoard
   -- * Internal
   , parseSubmitRes
   ) where
@@ -61,6 +61,7 @@ import           Data.Functor.Classes
 import           Data.List.NonEmpty         (NonEmpty(..))
 import           Data.Map                   (Map)
 import           Data.Maybe
+import           Data.Profunctor
 import           Data.Text                  (Text)
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
@@ -70,6 +71,7 @@ import           GHC.Generics
 import           Servant.API
 import           Text.Printf
 import           Text.Read                  (readMaybe)
+import qualified Data.Map                   as M
 import qualified Data.Text                  as T
 import qualified Text.HTML.TagSoup          as H
 import qualified Text.Megaparsec            as P
@@ -96,8 +98,6 @@ instance Show Day where
 --
 -- You can usually get 'Part1' (if it is already released) with a nonsense
 -- session key, but 'Part2' always requires a valid session key.
---
--- Note also that Challenge #25 typically only has a single part.
 data Part = Part1 | Part2
   deriving (Show, Read, Eq, Ord, Enum, Bounded, Typeable, Generic)
 
@@ -400,9 +400,43 @@ mkDay_ = fromMaybe e . mkDay
   where
     e = errorWithoutStackTrace "Advent.mkDay_: Date out of range (1 - 25)"
 
+-- | This is a @Prism' 'Integer' 'Day'@ , to treat an 'Integer' as if it
+-- were a 'Day'.
+--
+-- @since 0.2.4.0
+_DayInt :: (Choice p, Applicative f) => p Day (f Day) -> p Integer (f Integer)
+_DayInt = dimap a b . right'
+  where
+    a i = maybe (Left i) Right . mkDay $ i
+    b   = either pure (fmap dayInt)
+
+-- | Pattern synonym allowing you to match on an 'Integer' as if it were
+-- a 'Day':
+--
+-- @
+-- case myInt of
+--   DayInt d -> ...
+--   _        -> ...
+-- @
+--
+-- Will fail if the integer is out of bounds (outside of 1-25)
+--
+-- @since 0.2.4.0
+pattern DayInt :: Day -> Integer
+pattern DayInt d <- (mkDay->Just d)
+  where
+    DayInt d = dayInt d
+
 -- | A character associated with a given part.  'Part1' is associated with
 -- @\'a\'@, and 'Part2' is associated with @\'b\'@
 partChar :: Part -> Char
 partChar Part1 = 'a'
 partChar Part2 = 'b'
 
+-- | Check if a 'DailyLeaderboard' is filled up or not.
+--
+-- @since 0.2.4.0
+fullDailyBoard
+    :: DailyLeaderboard
+    -> Bool
+fullDailyBoard DLB{..} = (M.size dlbStar1 + M.size dlbStar2) >= 200

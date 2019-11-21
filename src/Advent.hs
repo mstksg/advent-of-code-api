@@ -63,6 +63,8 @@ module Advent (
   , aocDay
   -- ** Part
   , partChar, partInt
+  -- ** Leaderboard
+  , fullDailyBoard
   -- ** Throttler
   , setAoCThrottleLimit, getAoCThrottleLimit
   -- * Internal
@@ -382,10 +384,10 @@ saverLoader
     -> AoC a
     -> SaverLoader (Either AoCError a)
 saverLoader evt = \case
-    AoCPrompt d -> SL { _slSave = either (const Nothing) (Just . encodeMap)
+    AoCPrompt{} -> SL { _slSave = either (const Nothing) (Just . encodeMap)
                       , _slLoad = \str ->
                           let mp     = decodeMap str
-                              hasAll = S.null (expectedParts d `S.difference` M.keysSet mp)
+                              hasAll = S.null (expectedParts `S.difference` M.keysSet mp)
                           in  Right mp <$ guard hasAll
                       }
     AoCInput{}  -> SL { _slSave = either (const Nothing) Just
@@ -393,12 +395,11 @@ saverLoader evt = \case
                       }
     AoCSubmit{} -> noCache
     AoCLeaderboard{} -> noCache
-    AoCDailyLeaderboard d -> SL
+    AoCDailyLeaderboard{} -> SL
         { _slSave = either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8 . A.encode)
         , _slLoad = \str -> do
             r <- A.decode . TL.encodeUtf8 . TL.fromStrict $ str
-            let l = M.size (dlbStar1 r) + M.size (dlbStar2 r)
-            guard $ l >= fullLength d
+            guard $ fullDailyBoard r
             pure $ Right r
         }
     AoCGlobalLeaderboard{}
@@ -408,14 +409,8 @@ saverLoader evt = \case
           , _slLoad = fmap Right . A.decode . TL.encodeUtf8 . TL.fromStrict
           }
   where
-    expectedParts :: Day -> Set Part
-    expectedParts d
-      | d == maxBound = S.singleton Part1
-      | otherwise     = S.fromDistinctAscList [Part1 ..]
-    fullLength :: Day -> Int
-    fullLength d
-      | d == maxBound = 100
-      | otherwise     = 200
+    expectedParts :: Set Part
+    expectedParts = S.fromDistinctAscList [Part1 ..]
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp
