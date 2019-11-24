@@ -259,16 +259,31 @@ instance FromJSON LeaderboardMember where
           Nothing -> fail "bad stamp"
           Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
 
+-- | @since 0.2.4.2
+instance ToJSONKey Day where
+    toJSONKey = toJSONKeyText $ T.pack . show . dayInt
 instance FromJSONKey Day where
     fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+-- | @since 0.2.4.2
+instance ToJSONKey Part where
+    toJSONKey = toJSONKeyText $ \case
+      Part1 -> "1"
+      Part2 -> "2"
 instance FromJSONKey Part where
     fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
 
+-- | @since 0.2.4.2
+instance ToJSON Part where
+    toJSON = String . (\case Part1 -> "1"; Part2 -> "2")
 instance FromJSON Part where
     parseJSON = withText "Part" $ \case
       "1" -> pure Part1
       "2" -> pure Part2
       _   -> fail "Bad part"
+
+-- | @since 0.2.4.2
+instance ToJSON Day where
+    toJSON = String . T.pack . show . dayInt
 instance FromJSON Day where
     parseJSON = withText "Day" $ \t ->
       case readMaybe (T.unpack t) of
