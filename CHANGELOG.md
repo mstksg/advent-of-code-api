@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.5.0
+---------------
+
+*December 2, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.5.0>
+
+*   Add `runAoC_`, which is `runAoC` but throwing an IO exception instead of
+    returning an `Either`.
+
 Version 0.2.4.2
 ---------------
 

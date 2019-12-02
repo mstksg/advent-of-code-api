@@ -52,6 +52,7 @@ module Advent (
   , AoCOpts(..)
   , SubmitRes(..), showSubmitRes
   , runAoC
+  , runAoC_
   , defaultAoCOpts
   , AoCError(..)
   -- ** Calendar
@@ -356,6 +357,13 @@ runAoC AoCOpts{..} a = do
            $ runClientM (aocReq _aYear a) =<< aocClientEnv _aSessionKey
       mcr <- maybe (throwError AoCThrottleError) pure mtr
       either (throwError . AoCClientError) pure mcr
+
+-- | A version of 'runAoC' that throws an IO exception (of type 'AoCError')
+-- upon failure, instead of an 'Either'.
+--
+-- @since 0.2.5.0
+runAoC_ :: AoCOpts -> AoC a -> IO a
+runAoC_ o = either throwIO pure <=< runAoC o
 
 aocClientEnv :: String -> IO ClientEnv
 aocClientEnv s = do

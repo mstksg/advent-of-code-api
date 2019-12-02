@@ -1,5 +1,5 @@
 name:                advent-of-code-api
-version:             0.2.4.2
+version:             0.2.5.0
 github:              "mstksg/advent-of-code-api"
 license:             BSD3
 author:              "Justin Le"
