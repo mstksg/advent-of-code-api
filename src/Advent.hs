@@ -63,6 +63,7 @@ module Advent (
   -- ** Day
   , mkDay, mkDay_, dayInt, pattern DayInt, _DayInt
   , aocDay
+  , aocServerTime
   -- ** Part
   , partChar, partInt
   -- ** Leaderboard
@@ -454,6 +455,14 @@ challengeReleaseTime
     -> UTCTime
 challengeReleaseTime y d = UTCTime (fromGregorian y 12 (fromIntegral (dayInt d)))
                                    (5 * 60 * 60)
+
+-- | Utility to get the current time on AoC servers.  Basically just gets the current
+-- time in Eastern Standard Time.  This is only as accurate as your
+-- machine's actual time --- it doesn't actually do anything networked.
+--
+-- @since 0.2.6.0
+aocServerTime :: IO LocalTime
+aocServerTime = utcToLocalTime (read "EST") <$> getCurrentTime
 
 strip :: String -> String
 strip = T.unpack . T.strip . T.pack
