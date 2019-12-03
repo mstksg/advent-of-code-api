@@ -443,8 +443,8 @@ saverLoader validToken evt = \case
   where
     expectedParts :: Set Part
     expectedParts
-      | validToken = S.singleton Part1
-      | otherwise  = S.fromDistinctAscList [Part1 ..]
+      | validToken = S.fromDistinctAscList [Part1 ..]
+      | otherwise  = S.singleton Part1
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp

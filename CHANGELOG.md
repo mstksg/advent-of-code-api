@@ -12,6 +12,7 @@ Version 0.2.6.0
 *   Fix cacheing rules for global leaderboard (was previously not saving or
     invalidating cache properly) also for prompt (will not invalidate
     part1-only caches if there is no session key)
+*   **0.2.6.1 Bugfix**: Fix bug in prompt cache invalidation
 
 Version 0.2.5.0
 ---------------
