@@ -1,14 +1,17 @@
 Changelog
 =========
 
-Version 0.2.5.0
+Version 0.2.6.0
 ---------------
 
-*Unreleased*
+*December 3, 2019*
 
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.6.0>
 
 *   Add `aocServerTime` to get the current time for AoC servers.
+*   Fix cacheing rules for global leaderboard (was previously not saving or
+    invalidating cache properly) also for prompt (will not invalidate
+    part1-only caches if there is no session key)
 
 Version 0.2.5.0
 ---------------

@@ -9,6 +9,7 @@
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
+{-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE TypeInType         #-}
 {-# LANGUAGE ViewPatterns       #-}
 
@@ -139,12 +140,20 @@ getAoCThrottleLimit = getLimit aocThrottler
 data AoC :: Type -> Type where
     -- | Fetch prompts for a given day.  Returns a 'Map' of 'Part's and
     -- their associated promps, as HTML.
+    --
+    -- _Cacheing rules_: Is cached on a per-day basis.  An empty session
+    -- key is given, it will be happy with only having Part 1 cached.  If
+    -- a non-empty session key is given, it will trigger a cache
+    -- invalidation on every request until both Part 1 and Part 2 are
+    -- received.
     AoCPrompt
         :: Day
         -> AoC (Map Part Text)
 
     -- | Fetch input, as plaintext.  Returned verbatim.  Be aware that
     -- input might contain trailing newlines.
+    --
+    -- /Cacheing rules/: Is cached forever, per day per session key.
     AoCInput :: Day -> AoC Text
 
     -- | Submit a plaintext answer (the 'String') to a given day and part.
@@ -153,6 +162,8 @@ data AoC :: Type -> Type where
     -- __WARNING__: Answers are not length-limited.  Answers are stripped
     -- of leading and trailing whitespace and run through 'URI.encode'
     -- before submitting.
+    --
+    -- /Cacheing rules/: Is never cached.
     AoCSubmit
         :: Day
         -> Part
@@ -175,6 +186,9 @@ data AoC :: Type -> Type where
     -- you set up automation for this, please do not use it more than once
     -- per day.
     --
+    -- /Cacheing rules/: Is never cached, so please use responsibly (see
+    -- note above).
+    --
     -- @since 0.2.0.0
     AoCLeaderboard
         :: Integer
@@ -187,7 +201,7 @@ data AoC :: Type -> Type where
     -- when using this.  If you automate this, please do not fetch any more
     -- often than necessary.
     --
-    -- Calls to this will be cached if a full leaderboard is observed.
+    -- /Cacheing rules/: Will be cached if a full leaderboard is observed.
     --
     -- @since 0.2.3.0
     AoCDailyLeaderboard
@@ -201,7 +215,8 @@ data AoC :: Type -> Type where
     -- when using this.  If you automate this, please do not fetch any more
     -- often than necessary.
     --
-    -- Calls to this will be cached if fetched after each event ends.
+    -- /Cacheing rules/: Will not cache if an event is ongoing, but will be
+    -- cached if received after the event is over.
     --
     -- @since 0.2.3.0
     AoCGlobalLeaderboard
@@ -345,7 +360,10 @@ runAoC AoCOpts{..} a = do
           Just fp -> cacheing (cacheDir </> fp) $
                        if _aForce
                          then noCache
-                         else saverLoader (not eventOver) a
+                         else saverLoader
+                                (not (null _aSessionKey))
+                                (not eventOver)
+                                a
 
     cacher . runExceptT $ do
       forM_ (aocDay a) $ \d -> do
@@ -390,10 +408,11 @@ aocClientEnv s = do
 
 
 saverLoader
-    :: Bool             -- ^ is the event ongoing (True) or over (False)?
+    :: Bool             -- ^ is there a non-empty session token?
+    -> Bool             -- ^ is the event ongoing (True) or over (False)?
     -> AoC a
     -> SaverLoader (Either AoCError a)
-saverLoader evt = \case
+saverLoader validToken evt = \case
     AoCPrompt{} -> SL { _slSave = either (const Nothing) (Just . encodeMap)
                       , _slLoad = \str ->
                           let mp     = decodeMap str
@@ -412,15 +431,20 @@ saverLoader evt = \case
             guard $ fullDailyBoard r
             pure $ Right r
         }
-    AoCGlobalLeaderboard{}
-      | evt       -> noCache
-      | otherwise -> SL
-          { _slSave = either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8 . A.encode)
-          , _slLoad = fmap Right . A.decode . TL.encodeUtf8 . TL.fromStrict
-          }
+    AoCGlobalLeaderboard{} -> SL
+        { _slSave = either
+                        (const Nothing)
+                        (Just . TL.toStrict . TL.decodeUtf8 . A.encode @(Bool, GlobalLeaderboard) . (evt,))
+        , _slLoad = \str -> do
+            (evt', lb) <- A.decode @(Bool, GlobalLeaderboard) . TL.encodeUtf8 . TL.fromStrict $ str
+            guard $ not evt'        -- only load cache if evt' is false: it was saved in a non-evt time
+            pure $ Right lb
+        }
   where
     expectedParts :: Set Part
-    expectedParts = S.fromDistinctAscList [Part1 ..]
+    expectedParts
+      | validToken = S.singleton Part1
+      | otherwise  = S.fromDistinctAscList [Part1 ..]
     sep = ">>>>>>>>>"
     encodeMap mp = T.intercalate "\n" . concat $
                             [ maybeToList $ M.lookup Part1 mp
