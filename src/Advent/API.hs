@@ -60,6 +60,7 @@ import           Data.Maybe
 import           Data.Ord
 import           Data.Proxy
 import           Data.Text              (Text)
+import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.Time.LocalTime
 import           GHC.TypeLits
@@ -172,9 +173,11 @@ instance FromTags "div" DailyLeaderboard where
               where
                 dlb1 = (Just Nothing        , dlb { dlbStar1 = M.insert dlbmRank m (dlbStar1 dlb) })
                 dlb2 = (Just (Just dlbmRank), dlb { dlbStar2 = M.insert dlbmRank m (dlbStar2 dlb) })
-        mkDiff t = t `diffLocalTime` startOfDay
+        mkDiff t = t `dlt` startOfDay
           where
             startOfDay = t { localTimeOfDay = midnight }
+            -- diffLocalTime, but is only in time >= 1.9
+            dlt a b = diffUTCTime (localTimeToUTC utc a) (localTimeToUTC utc b)
 
 instance FromTags "div" GlobalLeaderboard where
     fromTags _ = Just . GLB . reScore . M.fromListWith (<>)

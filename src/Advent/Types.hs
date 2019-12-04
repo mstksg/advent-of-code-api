@@ -188,10 +188,12 @@ data DailyLeaderboardMember = DLBM
 -- @since 0.2.7.0
 dlbmClockTime :: Integer -> Day -> NominalDiffTime -> ZonedTime
 dlbmClockTime y d t = r
-    { zonedTimeToLocalTime = t `addLocalTime` zonedTimeToLocalTime r
+    { zonedTimeToLocalTime = t `alt` zonedTimeToLocalTime r
     }
   where
     r = challengeReleaseTime y d
+    -- addLocalTime, but is only in time >= 1.9
+    alt x = utcToLocalTime utc . addUTCTime x . localTimeToUTC utc
 
 -- | Daily leaderboard, containing Star 1 and Star 2 completions
 --
