@@ -54,27 +54,27 @@ import           Data.Bifunctor
 import           Data.Char
 import           Data.Finite
 import           Data.Foldable
-import           Data.List.NonEmpty        (NonEmpty(..))
-import           Data.Map                  (Map)
+import           Data.List.NonEmpty     (NonEmpty(..))
+import           Data.Map               (Map)
 import           Data.Maybe
 import           Data.Ord
 import           Data.Proxy
-import           Data.Text                 (Text)
+import           Data.Text              (Text)
 import           Data.Time.Format
 import           Data.Time.LocalTime
 import           GHC.TypeLits
 import           Servant.API
 import           Servant.Client
-import           Text.HTML.TagSoup.Tree    (TagTree(..))
-import           Text.Read                 (readMaybe)
-import qualified Data.ByteString.Lazy      as BSL
-import qualified Data.List.NonEmpty        as NE
-import qualified Data.Map                  as M
-import qualified Data.Text                 as T
-import qualified Data.Text.Encoding        as T
-import qualified Network.HTTP.Media        as M
-import qualified Text.HTML.TagSoup         as H
-import qualified Text.HTML.TagSoup.Tree    as H
+import           Text.HTML.TagSoup.Tree (TagTree(..))
+import           Text.Read              (readMaybe)
+import qualified Data.ByteString.Lazy   as BSL
+import qualified Data.List.NonEmpty     as NE
+import qualified Data.Map               as M
+import qualified Data.Text              as T
+import qualified Data.Text.Encoding     as T
+import qualified Network.HTTP.Media     as M
+import qualified Text.HTML.TagSoup      as H
+import qualified Text.HTML.TagSoup.Tree as H
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))
@@ -136,6 +136,8 @@ instance (FromTags cls a, FromTags cls b) => FromTags cls (a :<|> b) where
 instance FromTags "article" SubmitRes where
     fromTags _ = Just . parseSubmitRes . fold  . listToMaybe
 
+-- | Assumes that completion times took place on the same day as puzzle
+-- release, since there's no other way to determine puzzle release time.
 instance FromTags "div" DailyLeaderboard where
     fromTags _ = Just . assembleDLB . mapMaybe parseMember
       where
@@ -144,7 +146,7 @@ instance FromTags "div" DailyLeaderboard where
             dlbmRank <- fmap Rank . packFinite . subtract 1
                     =<< readMaybe . filter isDigit . T.unpack . fst
                     =<< findTag uni "span" (Just "leaderboard-position")
-            dlbmTime <- fmap (localTimeToUTC (read "EST"))
+            dlbmTime <- fmap mkDiff
                       . parseTimeM True defaultTimeLocale "%b %d  %H:%M:%S"
                       . T.unpack . fst
                     =<< findTag uni "span" (Just "leaderboard-time")
@@ -170,6 +172,9 @@ instance FromTags "div" DailyLeaderboard where
               where
                 dlb1 = (Just Nothing        , dlb { dlbStar1 = M.insert dlbmRank m (dlbStar1 dlb) })
                 dlb2 = (Just (Just dlbmRank), dlb { dlbStar2 = M.insert dlbmRank m (dlbStar2 dlb) })
+        mkDiff t = t `diffLocalTime` startOfDay
+          where
+            startOfDay = t { localTimeOfDay = midnight }
 
 instance FromTags "div" GlobalLeaderboard where
     fromTags _ = Just . GLB . reScore . M.fromListWith (<>)

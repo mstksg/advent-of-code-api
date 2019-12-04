@@ -47,6 +47,8 @@ module Advent.Types (
   , partInt
   , partChar
   , fullDailyBoard
+  , dlbmClockTime
+  , challengeReleaseTime
   -- * Internal
   , parseSubmitRes
   ) where
@@ -63,7 +65,7 @@ import           Data.Map                   (Map)
 import           Data.Maybe
 import           Data.Profunctor
 import           Data.Text                  (Text)
-import           Data.Time.Clock
+import           Data.Time hiding           (Day)
 import           Data.Time.Clock.POSIX
 import           Data.Typeable
 import           Data.Void
@@ -172,13 +174,24 @@ newtype Rank = Rank { getRank :: Finite 100 }
 -- @since 0.2.3.0
 data DailyLeaderboardMember = DLBM
     { dlbmRank      :: Rank
-    , dlbmTime      :: UTCTime
+    , dlbmTime      :: NominalDiffTime      -- ^ time from midnight EST. use 'dlbmClockTime' to convert to actual time.
     , dlbmUser      :: Either Integer Text
     , dlbmLink      :: Maybe Text
     , dlbmImage     :: Maybe Text
     , dlbmSupporter :: Bool
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
+
+-- | Turn a 'dlbmTime' field into a 'ZonedTime' based on the year and day
+-- of event.
+--
+-- @since 0.2.7.0
+dlbmClockTime :: Integer -> Day -> NominalDiffTime -> ZonedTime
+dlbmClockTime y d t = r
+    { zonedTimeToLocalTime = t `addLocalTime` zonedTimeToLocalTime r
+    }
+  where
+    r = challengeReleaseTime y d
 
 -- | Daily leaderboard, containing Star 1 and Star 2 completions
 --
@@ -455,3 +468,20 @@ fullDailyBoard
     :: DailyLeaderboard
     -> Bool
 fullDailyBoard DLB{..} = (M.size dlbStar1 + M.size dlbStar2) >= 200
+
+-- | Prompt release time.
+--
+-- Changed from 'UTCTime' to 'ZonedTime' in v0.2.7.0.  To use as
+-- a 'UTCTime', use 'zonedTimeToUTC'.
+challengeReleaseTime
+    :: Integer              -- ^ year
+    -> Day                  -- ^ day
+    -> ZonedTime
+challengeReleaseTime y d = ZonedTime
+    { zonedTimeToLocalTime = LocalTime
+        { localDay       = fromGregorian y 12 (fromIntegral (dayInt d))
+        , localTimeOfDay = midnight
+        }
+    , zonedTimeZone = read "EST"
+    }
+

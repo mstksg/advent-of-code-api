@@ -463,7 +463,7 @@ timeToRelease
     :: Integer              -- ^ year
     -> Day                  -- ^ day
     -> IO NominalDiffTime
-timeToRelease y d = (challengeReleaseTime y d `diffUTCTime`) <$> getCurrentTime
+timeToRelease y d = (zonedTimeToUTC (challengeReleaseTime y d) `diffUTCTime`) <$> getCurrentTime
 
 -- | Check if a challenge has been released yet.
 challengeReleased
@@ -471,14 +471,6 @@ challengeReleased
     -> Day                  -- ^ day
     -> IO Bool
 challengeReleased y = fmap (<= 0) . timeToRelease y
-
--- | Prompt release time
-challengeReleaseTime
-    :: Integer              -- ^ year
-    -> Day                  -- ^ day
-    -> UTCTime
-challengeReleaseTime y d = UTCTime (fromGregorian y 12 (fromIntegral (dayInt d)))
-                                   (5 * 60 * 60)
 
 -- | Utility to get the current time on AoC servers.  Basically just gets the current
 -- time in Eastern Standard Time.  This is only as accurate as your

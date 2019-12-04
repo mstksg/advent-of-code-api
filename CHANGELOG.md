@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 0.2.7.0
+---------------
+
+*December 4, 2019*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.7.0>
+
+*   Throughout the library, change from `UTCTime` to `ZonedTime`, except for
+    situations where the official site uses actual UTCTime.  The main change is
+    in `challengeReleaseTime`.
+*   `challengeReleaseTime` tmoved to *Advent.Types* but re-exported from
+    *Advent*.
+*   `dlbmTime` changed from `UTCTime` to `NominalDiffTime`, since we don't have
+    information about the year from the HTML returned alone.  This fixes a bug
+    where the time would always be in 1970.
+*   Added `dlbmClockTime` to get the actual `ZonedTime` from a daily
+    leaderboard completion time.
+
 Version 0.2.6.0
 ---------------
 
