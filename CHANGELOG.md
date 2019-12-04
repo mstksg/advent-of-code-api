@@ -11,13 +11,15 @@ Version 0.2.7.0
 *   Throughout the library, change from `UTCTime` to `ZonedTime`, except for
     situations where the official site uses actual UTCTime.  The main change is
     in `challengeReleaseTime`.
-*   `challengeReleaseTime` tmoved to *Advent.Types* but re-exported from
+*   `challengeReleaseTime` moved to *Advent.Types* but re-exported from
     *Advent*.
-*   `dlbmTime` changed from `UTCTime` to `NominalDiffTime`, since we don't have
-    information about the year from the HTML returned alone.  This fixes a bug
-    where the time would always be in 1970.
-*   Added `dlbmClockTime` to get the actual `ZonedTime` from a daily
-    leaderboard completion time.
+*   `dlbmTime` changed from `UTCTime` to `NominalDiffTime` `dlbmDecTime`, which
+    is time from December 1st.  This is because we don't have information about
+    the year from the HTML returned alone.  This fixes a bug where the time
+    would always be in 1970.
+*   To convert `dlbmDecTime` back into a useful time,added `dlbmCompleteTime`
+    to get the actual time of completion (as a `ZonedTime`), and `dlbmTime` to
+    get the `NominalDiffTime` representing how long the challenge took.
 
 Version 0.2.6.0
 ---------------

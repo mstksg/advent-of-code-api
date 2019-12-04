@@ -47,7 +47,8 @@ module Advent.Types (
   , partInt
   , partChar
   , fullDailyBoard
-  , dlbmClockTime
+  , dlbmCompleteTime
+  , dlbmTime
   , challengeReleaseTime
   -- * Internal
   , parseSubmitRes
@@ -56,6 +57,7 @@ module Advent.Types (
 import           Control.Applicative
 import           Data.Aeson
 import           Data.Aeson.Types
+import           Data.Bifunctor
 import           Data.Char
 import           Data.Finite
 import           Data.Foldable
@@ -174,7 +176,12 @@ newtype Rank = Rank { getRank :: Finite 100 }
 -- @since 0.2.3.0
 data DailyLeaderboardMember = DLBM
     { dlbmRank      :: Rank
-    , dlbmTime      :: NominalDiffTime      -- ^ time from midnight EST. use 'dlbmClockTime' to convert to actual time.
+    -- | Time from midnight EST of December 1st for that event.  Use
+    -- 'dlbmCompleteTime' to convert to an actual time for event
+    -- completion, and 'dlbmTime' to get the time it took to solve.
+    --
+    -- @since 0.2.7.0
+    , dlbmDecTime   :: NominalDiffTime      -- ^ time from midnight EST.
     , dlbmUser      :: Either Integer Text
     , dlbmLink      :: Maybe Text
     , dlbmImage     :: Maybe Text
@@ -182,18 +189,27 @@ data DailyLeaderboardMember = DLBM
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
--- | Turn a 'dlbmTime' field into a 'ZonedTime' based on the year and day
--- of event.
+-- | Turn a 'dlbmDecTime' field into a 'ZonedTime' for the actual
+-- completion of the puzzle, based on the year and day of event.
 --
 -- @since 0.2.7.0
-dlbmClockTime :: Integer -> Day -> NominalDiffTime -> ZonedTime
-dlbmClockTime y d t = r
-    { zonedTimeToLocalTime = t `alt` zonedTimeToLocalTime r
+dlbmCompleteTime :: Integer -> Day -> NominalDiffTime -> ZonedTime
+dlbmCompleteTime y d t = r
+    { zonedTimeToLocalTime = dlbmTime d t `alt` zonedTimeToLocalTime r
     }
   where
     r = challengeReleaseTime y d
     -- addLocalTime, but is only in time >= 1.9
     alt x = utcToLocalTime utc . addUTCTime x . localTimeToUTC utc
+
+-- | Turn a 'dlbmDecTime' field into a 'NominalDiffTime' representing the
+-- actual amount of time taken to complete the puzzle.
+--
+-- @since 0.2.7.0
+dlbmTime :: Day -> NominalDiffTime -> NominalDiffTime
+dlbmTime d = uncurry daysAndTimeOfDayToTime
+           . first (subtract (dayInt d - 1))
+           . timeToDaysAndTimeOfDay
 
 -- | Daily leaderboard, containing Star 1 and Star 2 completions
 --

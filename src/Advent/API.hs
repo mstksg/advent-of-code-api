@@ -47,6 +47,9 @@ module Advent.API (
   , processHTML
   ) where
 
+-- import           Data.Time.Clock
+-- import           Data.Time.Format
+-- import           Data.Time.LocalTime
 import           Advent.Types
 import           Control.Monad
 import           Control.Monad.State
@@ -60,9 +63,7 @@ import           Data.Maybe
 import           Data.Ord
 import           Data.Proxy
 import           Data.Text              (Text)
-import           Data.Time.Clock
-import           Data.Time.Format
-import           Data.Time.LocalTime
+import           Data.Time hiding       (Day)
 import           GHC.TypeLits
 import           Servant.API
 import           Servant.Client
@@ -137,8 +138,6 @@ instance (FromTags cls a, FromTags cls b) => FromTags cls (a :<|> b) where
 instance FromTags "article" SubmitRes where
     fromTags _ = Just . parseSubmitRes . fold  . listToMaybe
 
--- | Assumes that completion times took place on the same day as puzzle
--- release, since there's no other way to determine puzzle release time.
 instance FromTags "div" DailyLeaderboard where
     fromTags _ = Just . assembleDLB . mapMaybe parseMember
       where
@@ -147,10 +146,10 @@ instance FromTags "div" DailyLeaderboard where
             dlbmRank <- fmap Rank . packFinite . subtract 1
                     =<< readMaybe . filter isDigit . T.unpack . fst
                     =<< findTag uni "span" (Just "leaderboard-position")
-            dlbmTime <- fmap mkDiff
-                      . parseTimeM True defaultTimeLocale "%b %d  %H:%M:%S"
-                      . T.unpack . fst
-                    =<< findTag uni "span" (Just "leaderboard-time")
+            dlbmDecTime <- fmap mkDiff
+                         . parseTimeM True defaultTimeLocale "%b %d  %H:%M:%S"
+                         . T.unpack . fst
+                       =<< findTag uni "span" (Just "leaderboard-time")
             dlbmUser <- eitherUser tr
             pure DLBM{..}
           where
@@ -173,11 +172,11 @@ instance FromTags "div" DailyLeaderboard where
               where
                 dlb1 = (Just Nothing        , dlb { dlbStar1 = M.insert dlbmRank m (dlbStar1 dlb) })
                 dlb2 = (Just (Just dlbmRank), dlb { dlbStar2 = M.insert dlbmRank m (dlbStar2 dlb) })
-        mkDiff t = t `dlt` startOfDay
+        mkDiff t = t `dlt` decemberFirst
           where
-            startOfDay = t { localTimeOfDay = midnight }
             -- diffLocalTime, but is only in time >= 1.9
             dlt a b = diffUTCTime (localTimeToUTC utc a) (localTimeToUTC utc b)
+        decemberFirst = LocalTime (fromGregorian 1970 12 1) midnight
 
 instance FromTags "div" GlobalLeaderboard where
     fromTags _ = Just . GLB . reScore . M.fromListWith (<>)
