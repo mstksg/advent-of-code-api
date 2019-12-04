@@ -47,9 +47,6 @@ module Advent.API (
   , processHTML
   ) where
 
--- import           Data.Time.Clock
--- import           Data.Time.Format
--- import           Data.Time.LocalTime
 import           Advent.Types
 import           Control.Monad
 import           Control.Monad.State
@@ -57,29 +54,33 @@ import           Data.Bifunctor
 import           Data.Char
 import           Data.Finite
 import           Data.Foldable
-import           Data.List.NonEmpty     (NonEmpty(..))
-import           Data.Map               (Map)
+import           Data.List.NonEmpty         (NonEmpty(..))
+import           Data.Map                   (Map)
 import           Data.Maybe
 import           Data.Ord
 import           Data.Proxy
-import           Data.Text              (Text)
-import           Data.Time hiding       (Day)
+import           Data.Text                  (Text)
+import           Data.Time hiding           (Day)
 import           GHC.TypeLits
 import           Servant.API
 import           Servant.Client
-import           Text.HTML.TagSoup.Tree (TagTree(..))
-import           Text.Read              (readMaybe)
-import qualified Data.ByteString.Lazy   as BSL
-import qualified Data.List.NonEmpty     as NE
-import qualified Data.Map               as M
-import qualified Data.Text              as T
-import qualified Data.Text.Encoding     as T
-import qualified Network.HTTP.Media     as M
-import qualified Text.HTML.TagSoup      as H
-import qualified Text.HTML.TagSoup.Tree as H
+import           Text.HTML.TagSoup.Tree     (TagTree(..))
+import           Text.Read                  (readMaybe)
+import qualified Data.ByteString.Lazy       as BSL
+import qualified Data.List.NonEmpty         as NE
+import qualified Data.Map                   as M
+import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as T
+import qualified Network.HTTP.Media         as M
+import qualified Text.HTML.TagSoup          as H
+import qualified Text.HTML.TagSoup.Tree     as H
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))
+#endif
+
+#if !MIN_VERSION_time(1,9,0)
+import           Data.Time.LocalTime.Compat
 #endif
 
 -- | Raw "text/plain" MIME type
@@ -172,10 +173,7 @@ instance FromTags "div" DailyLeaderboard where
               where
                 dlb1 = (Just Nothing        , dlb { dlbStar1 = M.insert dlbmRank m (dlbStar1 dlb) })
                 dlb2 = (Just (Just dlbmRank), dlb { dlbStar2 = M.insert dlbmRank m (dlbStar2 dlb) })
-        mkDiff t = t `dlt` decemberFirst
-          where
-            -- diffLocalTime, but is only in time >= 1.9
-            dlt a b = diffUTCTime (localTimeToUTC utc a) (localTimeToUTC utc b)
+        mkDiff t = t `diffLocalTime` decemberFirst
         decemberFirst = LocalTime (fromGregorian 1970 12 1) midnight
 
 instance FromTags "div" GlobalLeaderboard where

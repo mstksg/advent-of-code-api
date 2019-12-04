@@ -87,6 +87,10 @@ import qualified Web.FormUrlEncoded         as WF
 import           Data.Semigroup ((<>))
 #endif
 
+#if !MIN_VERSION_time(1,9,0)
+import           Data.Time.LocalTime.Compat
+#endif
+
 -- | Describes the day: a number between 1 and 25 inclusive.
 --
 -- Represented by a 'Finite' ranging from 0 to 24 inclusive; you should
@@ -195,12 +199,10 @@ data DailyLeaderboardMember = DLBM
 -- @since 0.2.7.0
 dlbmCompleteTime :: Integer -> Day -> NominalDiffTime -> ZonedTime
 dlbmCompleteTime y d t = r
-    { zonedTimeToLocalTime = dlbmTime d t `alt` zonedTimeToLocalTime r
+    { zonedTimeToLocalTime = dlbmTime d t `addLocalTime` zonedTimeToLocalTime r
     }
   where
     r = challengeReleaseTime y d
-    -- addLocalTime, but is only in time >= 1.9
-    alt x = utcToLocalTime utc . addUTCTime x . localTimeToUTC utc
 
 -- | Turn a 'dlbmDecTime' field into a 'NominalDiffTime' representing the
 -- actual amount of time taken to complete the puzzle.

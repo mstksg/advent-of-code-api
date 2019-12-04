@@ -40,6 +40,8 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - megaparsec-8.0.0
+- time-compat-1.9.2.2
+- base-orphans-0.8.1
 
 ghc-options:
   "$locals": -ddump-to-file -ddump-hi
