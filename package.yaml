@@ -1,5 +1,5 @@
 name:                advent-of-code-api
-version:             0.2.6.1
+version:             0.2.6.2
 github:              "mstksg/advent-of-code-api"
 license:             BSD3
 author:              "Justin Le"
@@ -45,11 +45,11 @@ library:
   - finite-typelits
   - http-api-data
   - http-client
-  - profunctors
   - http-client-tls
   - http-media
   - megaparsec >= 7
   - mtl
+  - profunctors
   - servant
   - servant-client
   - servant-client-core

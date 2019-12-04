@@ -13,6 +13,8 @@ Version 0.2.6.0
     invalidating cache properly) also for prompt (will not invalidate
     part1-only caches if there is no session key)
 *   **0.2.6.1 Bugfix**: Fix bug in prompt cache invalidation
+*   **0.2.6.2 Bugfix**: HTML parser for articles (for prompt API calls) now
+    more robust, adjusting for more malformed HTML from site.
 
 Version 0.2.5.0
 ---------------

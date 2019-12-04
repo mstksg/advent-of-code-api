@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
@@ -53,27 +54,27 @@ import           Data.Bifunctor
 import           Data.Char
 import           Data.Finite
 import           Data.Foldable
-import           Data.List.NonEmpty     (NonEmpty(..))
-import           Data.Map               (Map)
+import           Data.List.NonEmpty        (NonEmpty(..))
+import           Data.Map                  (Map)
 import           Data.Maybe
 import           Data.Ord
 import           Data.Proxy
-import           Data.Text              (Text)
+import           Data.Text                 (Text)
 import           Data.Time.Format
 import           Data.Time.LocalTime
 import           GHC.TypeLits
 import           Servant.API
 import           Servant.Client
-import           Text.HTML.TagSoup.Tree (TagTree(..))
-import           Text.Read              (readMaybe)
-import qualified Data.ByteString.Lazy   as BSL
-import qualified Data.List.NonEmpty     as NE
-import qualified Data.Map               as M
-import qualified Data.Text              as T
-import qualified Data.Text.Encoding     as T
-import qualified Network.HTTP.Media     as M
-import qualified Text.HTML.TagSoup      as H
-import qualified Text.HTML.TagSoup.Tree as H
+import           Text.HTML.TagSoup.Tree    (TagTree(..))
+import           Text.Read                 (readMaybe)
+import qualified Data.ByteString.Lazy      as BSL
+import qualified Data.List.NonEmpty        as NE
+import qualified Data.Map                  as M
+import qualified Data.Text                 as T
+import qualified Data.Text.Encoding        as T
+import qualified Network.HTTP.Media        as M
+import qualified Text.HTML.TagSoup         as H
+import qualified Text.HTML.TagSoup.Tree    as H
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))
@@ -276,17 +277,32 @@ processHTML
     -> [Text]
 processHTML tag = mapMaybe getTag
                . H.universeTree
-               . H.parseTree
-               . cleanDoubleTitle
+               . H.tagTree
+               . cleanTags
+               . H.parseTags
   where
     getTag :: TagTree Text -> Maybe Text
     getTag (TagBranch n _ ts) = H.renderTree ts <$ guard (n == T.pack tag)
     getTag _                  = Nothing
-    -- 2016 Day 2 Part 2 has a malformed `<span>...</title>` tag that
-    -- causes tagsoup to choke.  this converts all </title> except for the
-    -- first one to be <span>.
-    cleanDoubleTitle :: Text -> Text
-    cleanDoubleTitle t = case T.splitOn "</title>" t of
-        x:xs -> x <> "</title>" <> T.intercalate "</span>" xs
-        []   -> ""      -- this shouldn't ever happen because splitOn is always non-empty
 
+-- | Some days, including:
+--
+-- * 2015 Day 6 Part 1
+-- * 2016 Day 2 Part 2
+--
+-- Have malformed HTML tags; the first has @<p></code>@ and the second has
+-- @<span></title>@.  This function cleans up all tags so that any closing
+-- tags ignore their actual tag type and instead close the last opened tag
+-- (if there is any).  If no tag is currently open then it just leaves it
+-- unchanged.
+cleanTags
+    :: [H.Tag str]
+    -> [H.Tag str]
+cleanTags = flip evalState [] . mapM go
+  where
+    go t = case t of
+      H.TagOpen n _ -> t <$ modify (n:)
+      H.TagClose _  -> get >>= \case
+        []   -> pure t
+        m:ms -> H.TagClose m <$ put ms
+      _             -> pure t
