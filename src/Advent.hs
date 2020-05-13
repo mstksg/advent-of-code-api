@@ -82,7 +82,9 @@ import           Advent.Throttle
 import           Advent.Types
 import           Control.Concurrent.STM
 import           Control.Exception
+import           Control.Monad
 import           Control.Monad.Except
+import           Control.Monad.IO.Class
 import           Data.Kind
 import           Data.Map                (Map)
 import           Data.Maybe
