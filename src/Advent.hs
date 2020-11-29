@@ -84,7 +84,6 @@ import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
-import           Control.Monad.IO.Class
 import           Data.Kind
 import           Data.Map                (Map)
 import           Data.Maybe
@@ -107,6 +106,7 @@ import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified Data.Text.Lazy          as TL
 import qualified Data.Text.Lazy.Encoding as TL
+import qualified Servant.Client          as Servant
 import qualified System.IO.Unsafe        as Unsafe
 
 #if MIN_VERSION_base(4,11,0)
@@ -391,7 +391,8 @@ aocClientEnv s = do
     t <- getCurrentTime
     v <- atomically . newTVar $ createCookieJar [c t]
     mgr <- newTlsManager
-    pure $ ClientEnv mgr aocBase (Just v)
+    pure $ (mkClientEnv mgr aocBase)
+        { Servant.cookieJar = Just v }
   where
     c t = Cookie
       { cookie_name             = "session"
