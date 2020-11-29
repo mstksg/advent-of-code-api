@@ -5,3 +5,4 @@ dist-newstyle/
 *~
 tmp-test-data
 *.dump-hi
+cabal.project.local

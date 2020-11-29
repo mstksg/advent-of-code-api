@@ -3,31 +3,10 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages:
-- completed:
-    hackage: megaparsec-8.0.0@sha256:362f85e243ecbcb550e1de6e5c74ba5a50c09edaa1208c99bc5b9fd242227fc6,3808
-    pantry-tree:
-      size: 1446
-      sha256: 955117c00a86970f2d0c215f33cf5293b16589c04678a0a790c03368ab6fd0aa
-  original:
-    hackage: megaparsec-8.0.0
-- completed:
-    hackage: time-compat-1.9.2.2@sha256:9998dc1b77b5067572ab708e94750f1061152f342e92ad1aba38aae63581174d,4209
-    pantry-tree:
-      size: 3602
-      sha256: 724a63e80871bc6709a2d3ca1c3c7316048e99c9d50b0492f0eff25ce2cecbe0
-  original:
-    hackage: time-compat-1.9.2.2
-- completed:
-    hackage: base-orphans-0.8.1@sha256:defd0057b5db93257528d89b5b01a0fee9738e878c121c686948ac4aa5dded63,2927
-    pantry-tree:
-      size: 1272
-      sha256: e059f342ae4cd1edcbd90f5f69caab550a00cc64abcfd198ede188391ffe151f
-  original:
-    hackage: base-orphans-0.8.1
+packages: []
 snapshots:
 - completed:
-    size: 413621
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/11/2.yaml
-    sha256: 2462bf74c50949e771559a5d8afab837e5ba91504f102647cd653f0f17b646a0
-  original: nightly-2019-11-02
+    size: 532832
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/23.yaml
+    sha256: fbb2a0519008533924c7753bd7164ddd1009f09504eb06674acad6049b46db09
+  original: lts-16.23

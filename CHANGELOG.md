@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.2.7.1
+---------------
+
+*November 28, 2020*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.7.1>
+
+*   Work with servant 0.17 and above.
+
 Version 0.2.7.0
 ---------------
 
