@@ -50,6 +50,7 @@ module Advent (
     AoC(..)
   , Part(..)
   , Day(..)
+  , NextDayTime(..)
   , AoCOpts(..)
   , SubmitRes(..), showSubmitRes
   , runAoC
@@ -224,6 +225,18 @@ data AoC :: Type -> Type where
     AoCGlobalLeaderboard
         :: AoC GlobalLeaderboard
 
+    -- | From the calendar, fetch the next release's day and the
+    -- number of seconds util its release, if there is any at all.
+    --
+    -- This does an actual request to the AoC servers, and is only accurate
+    -- to the second; to infer this information (to the millisecond level)
+    -- from the system clock, you should probably use 'timeToRelease' and
+    -- 'aocServerTime' instead, which requires no network requests.
+    --
+    -- @since 0.2.8.0
+    AoCNextDayTime
+        :: AoC NextDayTime
+
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
 
@@ -235,6 +248,7 @@ aocDay (AoCSubmit d _ _ ) = Just d
 aocDay (AoCLeaderboard _) = Nothing
 aocDay (AoCDailyLeaderboard d) = Just d
 aocDay AoCGlobalLeaderboard = Nothing
+aocDay AoCNextDayTime       = Nothing
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
@@ -313,11 +327,13 @@ aocReq yr = \case
     AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient yr i in r
     AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient yr i
                          in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
-    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> r = adventAPIClient yr
+    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient yr
                          in  r (PublicCode c)
-    AoCDailyLeaderboard d -> let _ :<|> _ :<|> r :<|> _ = adventAPIClient yr
+    AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient yr
                              in  r d
-    AoCGlobalLeaderboard  -> let _ :<|> r :<|> _ :<|> _ = adventAPIClient yr
+    AoCGlobalLeaderboard  -> let _ :<|> _ :<|> r :<|> _ = adventAPIClient yr
+                             in  r
+    AoCNextDayTime        -> let r :<|> _ = adventAPIClient yr
                              in  r
 
 
@@ -332,8 +348,9 @@ apiCache sess yr = \case
     AoCInput  d      -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
     AoCSubmit{}      -> Nothing
     AoCLeaderboard{} -> Nothing
-    AoCDailyLeaderboard d -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
+    AoCDailyLeaderboard d  -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
     AoCGlobalLeaderboard{} -> Just $ printf "global/%04d.json" yr
+    AoCNextDayTime         -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
@@ -443,6 +460,7 @@ saverLoader validToken evt = \case
             guard $ not evt'        -- only load cache if evt' is false: it was saved in a non-evt time
             pure $ Right lb
         }
+    AoCNextDayTime{} -> noCache
   where
     expectedParts :: Set Part
     expectedParts

@@ -1,6 +1,17 @@
 Changelog
 =========
 
+Version 0.2.8.0
+---------------
+
+*December 14, 2020*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.0>
+
+*   Add servant endpoint to query calendar page for a year to infer next puzzle
+    and time to puzzle in seconds, backed by the `NextDayTime` data type.
+*   Add `AoCNextDayTime` to `AoC` to support the above operation.
+
 Version 0.2.7.1
 ---------------
 

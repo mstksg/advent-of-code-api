@@ -41,6 +41,7 @@ module Advent.Types (
   , DailyLeaderboardMember(..)
   , GlobalLeaderboard(..)
   , GlobalLeaderboardMember(..)
+  , NextDayTime(..)
   -- * Util
   , mkDay, mkDay_, dayInt
   , _DayInt, pattern DayInt
@@ -246,6 +247,13 @@ newtype GlobalLeaderboard = GLB {
   }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- | The next day for a challenge in a given year, and also the number of
+-- seconds until the challenge is released.
+--
+-- @since 0.2.8.0
+data NextDayTime = NextDayTime Day Int
+                 | NoNextDayTime
+  deriving (Show, Eq, Ord, Typeable, Generic)
 
 instance ToHttpApiData Part where
     toUrlPiece = T.pack . show . partInt
