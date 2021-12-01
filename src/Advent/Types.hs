@@ -287,18 +287,25 @@ instance FromJSON LeaderboardMember where
             <*> optional (o .: "name")
             <*> o .: "local_score"
             <*> (strInt =<< (o .: "id"))
-            <*> optional (fromEpoch =<< (o .: "last_star_ts"))
+            <*> optional (
+                    (fromEpochText   =<< (o .: "last_star_ts"))
+                <|> (fromEpochNumber <$> (o .: "last_star_ts"))
+                )
             <*> o .: "stars"
             <*> (do cdl <- o .: "completion_day_level"
-                    (traverse . traverse) ((fromEpoch =<<) . (.: "get_star_ts")) cdl
+                    (traverse . traverse) (\c ->
+                          (fromEpochText   =<< (c .: "get_star_ts"))
+                      <|> (fromEpochNumber <$> (c .: "get_star_ts"))
+                      ) cdl
                 )
       where
         strInt t = case readMaybe t of
           Nothing -> fail "bad int"
           Just i  -> pure i
-        fromEpoch t = case readMaybe t of
+        fromEpochText t = case readMaybe t of
           Nothing -> fail "bad stamp"
           Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
+        fromEpochNumber = posixSecondsToUTCTime
 
 -- | @since 0.2.4.2
 instance ToJSONKey Day where

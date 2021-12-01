@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.2.8.1
+---------------
+
+*November 30, 2021*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.1>
+
+*   Account for new json schema for private leaderboard stats
+
 Version 0.2.8.0
 ---------------
 
