@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.8.2
+---------------
+
+*December 9, 2022*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.2>
+
+*   As of 2022 AoC, private leaderboard json payload uses a string instead of a
+    number for owner_id.
+
 Version 0.2.8.1
 ---------------
 

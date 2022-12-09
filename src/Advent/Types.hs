@@ -150,7 +150,7 @@ newtype PublicCode = PublicCode { getPublicCode :: Integer }
 -- | Leaderboard type, representing private leaderboard information.
 data Leaderboard = LB
     { lbEvent   :: Integer                        -- ^ The year of the event
-    , lbOwnerId :: Integer                        -- ^ The Member ID of the owner, or the public code
+    , lbOwnerId :: String                         -- ^ The Member ID of the owner, or the public code
     , lbMembers :: Map Integer LeaderboardMember  -- ^ A map from member IDs to their leaderboard info
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
