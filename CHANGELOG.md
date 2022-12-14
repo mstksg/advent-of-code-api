@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.8.3
+---------------
+
+*December 10, 2022*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.3>
+
+*   Properly adjust for AoC private leaderboard json: it uses a number instead
+    of a string, but the parser was not properly fixed by hand.
+
 Version 0.2.8.2
 ---------------
 

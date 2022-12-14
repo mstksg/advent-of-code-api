@@ -150,7 +150,7 @@ newtype PublicCode = PublicCode { getPublicCode :: Integer }
 -- | Leaderboard type, representing private leaderboard information.
 data Leaderboard = LB
     { lbEvent   :: Integer                        -- ^ The year of the event
-    , lbOwnerId :: String                         -- ^ The Member ID of the owner, or the public code
+    , lbOwnerId :: Integer                        -- ^ The Member ID of the owner, or the public code
     , lbMembers :: Map Integer LeaderboardMember  -- ^ A map from member IDs to their leaderboard info
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
@@ -274,7 +274,7 @@ instance WF.ToForm SubmitInfo where
 instance FromJSON Leaderboard where
     parseJSON = withObject "Leaderboard" $ \o ->
         LB <$> (strInt =<< (o .: "event"))
-           <*> (strInt =<< (o .: "owner_id"))
+           <*> o .: "owner_id"
            <*> o .: "members"
       where
         strInt t = case readMaybe t of
