@@ -1,10 +1,19 @@
 Changelog
 =========
 
+Version 0.2.8.4
+---------------
+
+*December 14, 2022*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.4>
+
+*   Whoops, the member id is a number now too.
+
 Version 0.2.8.3
 ---------------
 
-*December 10, 2022*
+*December 13, 2022*
 
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.3>
 

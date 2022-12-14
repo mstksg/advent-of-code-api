@@ -286,7 +286,7 @@ instance FromJSON LeaderboardMember where
         LBM <$> o .: "global_score"
             <*> optional (o .: "name")
             <*> o .: "local_score"
-            <*> (strInt =<< (o .: "id"))
+            <*> o .: "id"
             <*> optional (
                     (fromEpochText   =<< (o .: "last_star_ts"))
                 <|> (fromEpochNumber <$> (o .: "last_star_ts"))
@@ -299,9 +299,6 @@ instance FromJSON LeaderboardMember where
                       ) cdl
                 )
       where
-        strInt t = case readMaybe t of
-          Nothing -> fail "bad int"
-          Just i  -> pure i
         fromEpochText t = case readMaybe t of
           Nothing -> fail "bad stamp"
           Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
