@@ -293,6 +293,9 @@ data AoCOpts = AoCOpts
       _aSessionKey :: String
       -- | Year of challenge
     , _aYear       :: Integer
+      -- | Structured user agent to use.  See
+      -- <https://www.reddit.com/r/adventofcode/comments/z9dhtd/please_include_your_contact_info_in_the_useragent/>
+    , _aUserAgent  :: AoCUserAgent
       -- | Cache directory.  If 'Nothing' is given, one will be allocated
       -- using 'getTemporaryDirectory'.
     , _aCache      :: Maybe FilePath
@@ -305,17 +308,20 @@ data AoCOpts = AoCOpts
     }
   deriving (Show, Typeable, Generic)
 
--- | Sensible defaults for 'AoCOpts' for a given year and session key.
+-- | Sensible defaults for 'AoCOpts' for a given user agent, year and session
+-- key.
 --
 -- Use system temporary directory as cache, and throttle requests to one
 -- request per three seconds.
 defaultAoCOpts
-    :: Integer
+    :: AoCUserAgent
+    -> Integer
     -> String
     -> AoCOpts
-defaultAoCOpts y s = AoCOpts
+defaultAoCOpts aua y s = AoCOpts
     { _aSessionKey = s
     , _aYear       = y
+    , _aUserAgent  = aua
     , _aCache      = Nothing
     , _aForce      = False
     , _aThrottle   = 3000000
@@ -326,19 +332,19 @@ aocBase :: BaseUrl
 aocBase = BaseUrl Https "adventofcode.com" 443 ""
 
 -- | 'ClientM' request for a given 'AoC' API call.
-aocReq :: Integer -> AoC a -> ClientM a
-aocReq yr = \case
-    AoCPrompt i       -> let r :<|> _        = adventAPIPuzzleClient yr i in r
-    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient yr i in r
-    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient yr i
+aocReq :: Maybe AoCUserAgent -> Integer -> AoC a -> ClientM a
+aocReq aua yr = \case
+    AoCPrompt i       -> let r :<|> _        = adventAPIPuzzleClient aua yr i in r
+    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r
+    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
                          in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
-    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient yr
+    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
                          in  r (PublicCode c)
-    AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient yr
+    AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
                              in  r d
-    AoCGlobalLeaderboard  -> let _ :<|> _ :<|> r :<|> _ = adventAPIClient yr
+    AoCGlobalLeaderboard  -> let _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
                              in  r
-    AoCNextDayTime        -> let r :<|> _ = adventAPIClient yr
+    AoCNextDayTime        -> let r :<|> _ = adventAPIClient aua yr
                              in  r
 
 
@@ -397,7 +403,7 @@ runAoC AoCOpts{..} a = do
 
       mtr <- liftIO
            . throttling aocThrottler (max 1000000 _aThrottle)
-           $ runClientM (aocReq _aYear a) =<< aocClientEnv _aSessionKey
+           $ runClientM (aocReq (Just _aUserAgent) _aYear a) =<< aocClientEnv _aSessionKey
       mcr <- maybe (throwError AoCThrottleError) pure mtr
       either (throwError . AoCClientError) pure mcr
 

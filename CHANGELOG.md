@@ -1,6 +1,19 @@
 Changelog
 =========
 
+Version 0.2.9.0
+---------------
+
+*December 11, 2023*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.9.0>
+
+*   All API requests now require providing a structured user agent data type,
+    to follow
+    <https://www.reddit.com/r/adventofcode/comments/z9dhtd/please_include_your_contact_info_in_the_useragent/>.
+    This is not enforced in the raw servant API, but is enforced in the
+    "regulated" `Advent` module.
+
 Version 0.2.8.5
 ---------------
 
