@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP                        #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -7,9 +8,9 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE ViewPatterns               #-}
 
@@ -61,7 +62,6 @@ import           Data.Aeson.Types
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Finite
-import           Data.Foldable
 import           Data.Functor.Classes
 import           Data.List.NonEmpty         (NonEmpty(..))
 import           Data.Map                   (Map)
@@ -83,6 +83,11 @@ import qualified Text.Megaparsec            as P
 import qualified Text.Megaparsec.Char       as P
 import qualified Text.Megaparsec.Char.Lexer as P
 import qualified Web.FormUrlEncoded         as WF
+
+
+#if !MIN_VERSION_base(4,16,0)
+import           Data.Foldable              (asum)
+#endif
 
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup ((<>))

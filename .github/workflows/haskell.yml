@@ -26,13 +26,23 @@ jobs:
         # - { build: stack, resolver: "--resolver lts-11"  }
         - { build: stack, resolver: "--resolver lts-12"  }
         - { build: stack, resolver: "--resolver lts-14"  }
+        - { build: stack, resolver: "--resolver lts-16"  }
+        - { build: stack, resolver: "--resolver lts-18"  }
+        - { build: stack, resolver: "--resolver lts-19"  }
+        - { build: stack, resolver: "--resolver lts-20"  }
+        - { build: stack, resolver: "--resolver lts-21"  }
         - { build: stack, resolver: "--resolver nightly" }
         - { build: stack, resolver: ""                   }
         - { build: cabal, ghc: 8.0.2, cabal-install: "2.0" }   # setup-haskell doesn't support 1.24
         - { build: cabal, ghc: 8.2.2, cabal-install: "2.0" }
         - { build: cabal, ghc: 8.4.4, cabal-install: "2.2" }
         - { build: cabal, ghc: 8.6.5, cabal-install: "2.4" }
-        - { build: cabal, ghc: 8.8.1, cabal-install: "2.4" }   # currently not working for >= 3.0
+        - { build: cabal, ghc: 8.8.4, cabal-install: "2.4" }   # currently not working for >= 3.0
+        - { build: cabal, ghc: 8.10.7, cabal-install: "2.4" }   # currently not working for >= 3.0
+        - { build: cabal, ghc: 9.0.2, cabal-install: "2.4" }   # currently not working for >= 3.0
+        - { build: cabal, ghc: 9.2.8, cabal-install: "2.4" }   # currently not working for >= 3.0
+        - { build: cabal, ghc: 9.4.8, cabal-install: "2.4" }   # currently not working for >= 3.0
+        - { build: cabal, ghc: 9.6.3, cabal-install: "2.4" }   # currently not working for >= 3.0
         # include: []
 
         exclude:

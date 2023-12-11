@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP                #-}
+{-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE GADTs              #-}
@@ -6,11 +7,11 @@
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PatternSynonyms    #-}
+{-# LANGUAGE PolyKinds          #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
 {-# LANGUAGE TypeApplications   #-}
-{-# LANGUAGE TypeInType         #-}
 {-# LANGUAGE ViewPatterns       #-}
 
 -- |
@@ -109,6 +110,10 @@ import qualified Data.Text.Lazy          as TL
 import qualified Data.Text.Lazy.Encoding as TL
 import qualified Servant.Client          as Servant
 import qualified System.IO.Unsafe        as Unsafe
+
+#if MIN_VERSION_mtl(2,3,0)
+import           Control.Monad.IO.Class (liftIO)
+#endif
 
 #if MIN_VERSION_base(4,11,0)
 import           Data.Functor
