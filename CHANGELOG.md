@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.2.8.5
+---------------
+
+*December 11, 2023*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.8.5>
+
+*   Compatibility with ghc-9.6 / mtl-2.3
+
 Version 0.2.8.4
 ---------------
 
