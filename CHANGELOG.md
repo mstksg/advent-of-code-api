@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.2.9.1
+---------------
+
+*December 11, 2023*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.9.1>
+
+*   Re-export `AoCUserAgent` from `Advent`.
+
 Version 0.2.9.0
 ---------------
 
