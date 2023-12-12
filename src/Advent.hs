@@ -53,6 +53,7 @@ module Advent (
   , Day(..)
   , NextDayTime(..)
   , AoCOpts(..)
+  , AoCUserAgent(..)
   , SubmitRes(..), showSubmitRes
   , runAoC
   , runAoC_
