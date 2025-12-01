@@ -1,6 +1,17 @@
 Changelog
 =========
 
+Version 0.2.10.0
+---------------
+
+*December 1, 2025*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.10.0>
+
+*   Quick change to make `global_score` optional for `LeaderboardMember` json.
+    Will follow-up with more broad changes about the lack of global leaderboard
+    and only 12 days for 2025.
+
 Version 0.2.9.1
 ---------------
 

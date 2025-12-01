@@ -162,7 +162,7 @@ data Leaderboard = LB
 
 -- | Leaderboard position for a given member.
 data LeaderboardMember = LBM
-    { lbmGlobalScore :: Integer                     -- ^ Global leaderboard score
+    { lbmGlobalScore :: Maybe Integer               -- ^ Global leaderboard score
     , lbmName        :: Maybe Text                  -- ^ Username, if user specifies one
     , lbmLocalScore  :: Integer                     -- ^ Score for this leaderboard
     , lbmId          :: Integer                     -- ^ Member ID
@@ -288,7 +288,7 @@ instance FromJSON Leaderboard where
 
 instance FromJSON LeaderboardMember where
     parseJSON = withObject "LeaderboardMember" $ \o ->
-        LBM <$> o .: "global_score"
+        LBM <$> optional (o .: "global_score")
             <*> optional (o .: "name")
             <*> o .: "local_score"
             <*> o .: "id"
