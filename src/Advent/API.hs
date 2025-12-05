@@ -299,10 +299,10 @@ adventAPIPuzzleClient aua y = pis
     _ :<|> _ :<|> pis :<|> _ = adventAPIClient aua y
 
 parseStats :: Text -> Maybe Stats
-parseStats = fmap M.fromList . traverse parseStatLine . mapMaybe asBranch . H.parseTree
+parseStats = fmap M.fromList . traverse parseStatLine . filter asBranch . H.parseTree
   where
-    asBranch b@TagBranch{} = Just b
-    asBranch _             = Nothing
+    asBranch TagBranch{} = True
+    asBranch _           = False
 
 parseStatLine :: TagTree Text -> Maybe (Day, DayStats)
 parseStatLine (TagBranch _ _ cs) = do
