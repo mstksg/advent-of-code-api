@@ -113,6 +113,9 @@ type Divs     = HTMLTags "div"
 -- | Interpret a response as a list of HTML 'T.Text' found in @<script>@ tags.
 type Scripts = HTMLTags "script"
 
+-- | Interpret a response as a list of HTML 'T.Text' found in @<pre>@ tags.
+type Pres = HTMLTags "pre"
+
 -- | Class for interpreting a list of 'T.Text' in tags to some desired
 -- output.
 --
@@ -229,6 +232,9 @@ instance FromTags "script" NextDayTime where
           where
             t' = "var " <> t <> " = "
 
+instance FromTags "pre" Stats where
+    fromTags _ = listToMaybe . mapMaybe parseStats
+
 -- | A structured user agent, based on
 -- <https://www.reddit.com/r/adventofcode/comments/z9dhtd/please_include_your_contact_info_in_the_useragent/>
 data AoCUserAgent = AoCUserAgent
@@ -247,6 +253,7 @@ type AdventAPI =
       Header "User-Agent" AoCUserAgent
    :> Capture "year" Integer
    :> (Get '[Scripts] NextDayTime
+  :<|> "stats" :> Get '[Pres] Stats
   :<|> "day" :> Capture "day" Day
              :> (Get '[Articles] (Map Part Text)
             :<|> "input" :> Get '[RawText] Text
@@ -273,6 +280,7 @@ adventAPIClient
     :: Maybe AoCUserAgent
     -> Integer
     -> ClientM NextDayTime
+  :<|> ClientM Stats
   :<|> (Day -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes)) )
   :<|> ClientM GlobalLeaderboard
   :<|> (Day -> ClientM DailyLeaderboard)
@@ -288,7 +296,34 @@ adventAPIPuzzleClient
     -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes))
 adventAPIPuzzleClient aua y = pis
   where
-    _ :<|> pis :<|> _ = adventAPIClient aua y
+    _ :<|> _ :<|> pis :<|> _ = adventAPIClient aua y
+
+parseStats :: Text -> Maybe Stats
+parseStats = fmap M.fromList . traverse parseStatLine . filter asBranch . H.parseTree
+  where
+    asBranch TagBranch{} = True
+    asBranch _           = False
+
+parseStatLine :: TagTree Text -> Maybe (Day, DayStats)
+parseStatLine (TagBranch _ _ cs) = do
+    dayTxt <- listToMaybe [t | TagLeaf (H.TagText t) <- cs, not (T.null (T.strip t))]
+    dy     <- mkDay =<< readMaybe (T.unpack (T.strip dayTxt))
+    gold   <- findNum "stats-both" cs
+    silver <- findNum "stats-firstonly" cs
+    pure (dy, DayStats gold silver)
+  where
+    findNum cls = listToMaybe . mapMaybe (go cls)
+    go cls (TagBranch "span" attr inner) = do
+      guard $ ("class", cls) `elem` attr
+      readMaybe . T.unpack . T.strip $ innerText inner
+    go _ _ = Nothing
+parseStatLine _ = Nothing
+
+innerText :: [TagTree Text] -> Text
+innerText = T.concat . mapMaybe go . H.universeTree
+  where
+    go (TagLeaf (H.TagText t)) = Just t
+    go _                       = Nothing
 
 userNameNaked :: [TagTree Text] -> Maybe Text
 userNameNaked = (listToMaybe .) . mapMaybe $ \x -> do
