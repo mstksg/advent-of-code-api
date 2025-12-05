@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.11.0
+---------------
+
+*December 5, 2025*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.11.0>
+
+*   Add endpoint for `<year>/stats` to get current star counts. Use with care,
+    never cached.
+
 Version 0.2.10.0
 ---------------
 
