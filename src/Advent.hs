@@ -52,6 +52,8 @@ module Advent (
   , Part(..)
   , Day(..)
   , NextDayTime(..)
+  , DayStats(..)
+  , Stats
   , AoCOpts(..)
   , AoCUserAgent(..)
   , SubmitRes(..), showSubmitRes
@@ -243,6 +245,15 @@ data AoC :: Type -> Type where
     AoCNextDayTime
         :: AoC NextDayTime
 
+    -- | Fetch the per-day completion stats for the current year.  Does not
+    -- require a session key.
+    --
+    -- /Cacheing rules/: Not cached.
+    --
+    -- @since 0.2.9.0
+    AoCStats
+        :: AoC Stats
+
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
 
@@ -255,6 +266,7 @@ aocDay (AoCLeaderboard _) = Nothing
 aocDay (AoCDailyLeaderboard d) = Just d
 aocDay AoCGlobalLeaderboard = Nothing
 aocDay AoCNextDayTime       = Nothing
+aocDay AoCStats             = Nothing
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
@@ -339,13 +351,15 @@ aocReq aua yr = \case
     AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r
     AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
                          in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
-    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
+    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
                          in  r (PublicCode c)
-    AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
+    AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
                              in  r d
-    AoCGlobalLeaderboard  -> let _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
+    AoCGlobalLeaderboard  -> let _ :<|> _ :<|> _ :<|> r :<|> _ :<|> _ = adventAPIClient aua yr
                              in  r
-    AoCNextDayTime        -> let r :<|> _ = adventAPIClient aua yr
+    AoCNextDayTime        -> let r :<|> _ :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
+                             in  r
+    AoCStats              -> let _ :<|> r :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
                              in  r
 
 
@@ -363,6 +377,7 @@ apiCache sess yr = \case
     AoCDailyLeaderboard d  -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
     AoCGlobalLeaderboard{} -> Just $ printf "global/%04d.json" yr
     AoCNextDayTime         -> Nothing
+    AoCStats               -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
@@ -473,6 +488,7 @@ saverLoader validToken evt = \case
             pure $ Right lb
         }
     AoCNextDayTime{} -> noCache
+    AoCStats{} -> noCache
   where
     expectedParts :: Set Part
     expectedParts

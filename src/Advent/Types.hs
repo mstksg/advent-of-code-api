@@ -43,6 +43,8 @@ module Advent.Types (
   , GlobalLeaderboard(..)
   , GlobalLeaderboardMember(..)
   , NextDayTime(..)
+  , DayStats(..)
+  , Stats
   -- * Util
   , mkDay, mkDay_, dayInt
   , _DayInt, pattern DayInt
@@ -259,6 +261,20 @@ newtype GlobalLeaderboard = GLB {
 data NextDayTime = NextDayTime Day Int
                  | NoNextDayTime
   deriving (Show, Eq, Ord, Typeable, Generic)
+
+-- | Stats for a single day on the event stats page.
+--
+-- @since 0.2.9.0
+data DayStats = DayStats
+    { dsBoth      :: Integer   -- ^ Users who completed both parts
+    , dsFirstOnly :: Integer   -- ^ Users who only completed the first part
+    }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic)
+
+-- | Stats for all days on the event stats page.
+--
+-- @since 0.2.9.0
+type Stats = Map Day DayStats
 
 instance ToHttpApiData Part where
     toUrlPiece = T.pack . show . partInt
