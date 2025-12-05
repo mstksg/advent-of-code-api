@@ -113,6 +113,9 @@ type Divs     = HTMLTags "div"
 -- | Interpret a response as a list of HTML 'T.Text' found in @<script>@ tags.
 type Scripts = HTMLTags "script"
 
+-- | Interpret a response as a list of HTML 'T.Text' found in @<pre>@ tags.
+type Pres = HTMLTags "pre"
+
 -- | Class for interpreting a list of 'T.Text' in tags to some desired
 -- output.
 --
@@ -250,7 +253,7 @@ type AdventAPI =
       Header "User-Agent" AoCUserAgent
    :> Capture "year" Integer
    :> (Get '[Scripts] NextDayTime
-  :<|> "stats" :> Get '[HTMLTags "pre"] Stats
+  :<|> "stats" :> Get '[Pres] Stats
   :<|> "day" :> Capture "day" Day
              :> (Get '[Articles] (Map Part Text)
             :<|> "input" :> Get '[RawText] Text
@@ -305,9 +308,9 @@ parseStatLine :: TagTree Text -> Maybe (Day, DayStats)
 parseStatLine (TagBranch _ _ cs) = do
     dayTxt <- listToMaybe [t | TagLeaf (H.TagText t) <- cs, not (T.null (T.strip t))]
     dy     <- mkDay =<< readMaybe (T.unpack (T.strip dayTxt))
-    both   <- findNum "stats-both" cs
-    first  <- findNum "stats-firstonly" cs
-    pure (dy, DayStats (fromIntegral both) (fromIntegral first))
+    gold   <- findNum "stats-both" cs
+    silver <- findNum "stats-firstonly" cs
+    pure (dy, DayStats gold silver)
   where
     findNum cls = listToMaybe . mapMaybe (go cls)
     go cls (TagBranch "span" attr inner)
