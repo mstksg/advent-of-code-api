@@ -264,7 +264,7 @@ data NextDayTime = NextDayTime Day Int
 
 -- | Stats for a single day on the event stats page.
 --
--- @since 0.2.9.0
+-- @since 0.2.11.0
 data DayStats = DayStats
     { dsGold   :: Integer   -- ^ Users who completed both parts
     , dsSilver :: Integer   -- ^ Users who only completed the first part
@@ -273,7 +273,7 @@ data DayStats = DayStats
 
 -- | Stats for all days on the event stats page.
 --
--- @since 0.2.9.0
+-- @since 0.2.11.0
 type Stats = Map Day DayStats
 
 instance ToHttpApiData Part where

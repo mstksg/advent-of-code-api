@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           advent-of-code-api
-version:        0.2.10.0
+version:        0.2.11.0
 synopsis:       Advent of Code REST API bindings and servant API
 description:    Haskell bindings for Advent of Code REST API and a servant API.  Please use
                 responsibly! See README.md or "Advent" module for an introduction and

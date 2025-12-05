@@ -250,7 +250,7 @@ data AoC :: Type -> Type where
     --
     -- /Cacheing rules/: Not cached.
     --
-    -- @since 0.2.9.0
+    -- @since 0.2.11.0
     AoCStats
         :: AoC Stats
 
