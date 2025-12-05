@@ -313,9 +313,9 @@ parseStatLine (TagBranch _ _ cs) = do
     pure (dy, DayStats gold silver)
   where
     findNum cls = listToMaybe . mapMaybe (go cls)
-    go cls (TagBranch "span" attr inner)
-      | ("class", cls) `elem` attr
-      , Just n <- readMaybe . T.unpack . T.strip $ innerText inner = Just n
+    go cls (TagBranch "span" attr inner) = do
+      guard $ ("class", cls) `elem` attr
+      readMaybe . T.unpack . T.strip $ innerText inner
     go _ _ = Nothing
 parseStatLine _ = Nothing
 

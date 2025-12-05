@@ -266,8 +266,8 @@ data NextDayTime = NextDayTime Day Int
 --
 -- @since 0.2.9.0
 data DayStats = DayStats
-    { dsBoth      :: Integer   -- ^ Users who completed both parts
-    , dsFirstOnly :: Integer   -- ^ Users who only completed the first part
+    { dsGold   :: Integer   -- ^ Users who completed both parts
+    , dsSilver :: Integer   -- ^ Users who only completed the first part
     }
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
