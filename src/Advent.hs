@@ -453,14 +453,14 @@ inferSubmitRes
     -> Part
     -> SubmitRes
     -> IO (Either AoCError SubmitRes)
-inferSubmitRes _ _ _ sr@(SubCorrect (Just _)) = pure $ Right sr
-inferSubmitRes opts d p (SubCorrect Nothing) = do
-    stats <- runAoC opts AoCStats
-    pure $ stats >>= \st ->
-      case M.lookup d st of
-        Just _  -> Right . SubCorrect . Just $ statsForDayPart d p st
-        Nothing -> Right $ SubCorrect Nothing
-inferSubmitRes _ _ _ sr = pure $ Right sr
+inferSubmitRes opts d p sr = case sr of
+    SubCorrect Nothing -> do
+        stats <- runAoC opts AoCStats
+        pure $ stats >>= \st ->
+          case M.lookup d st of
+            Just _  -> Right . SubCorrect . Just $ statsForDayPart d p st
+            Nothing -> Right $ SubCorrect Nothing
+    _ -> pure $ Right sr
 
 -- | Variant of 'inferSubmitRes' that returns the original response if stats
 -- lookup fails.
