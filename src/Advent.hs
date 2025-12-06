@@ -451,7 +451,8 @@ statsForDayPart d Part1 = maybe 0 dsSilver . M.lookup d
 statsForDayPart d Part2 = maybe 0 dsGold   . M.lookup d
 
 -- | If an Advent of Code submission returns 'SubCorrect' without an attached
--- rank, attempt to infer the rank from 'AoCStats'.
+-- rank, attempt to infer the rank from 'AoCStats', assuming that it was just
+-- submitted and received at this moment.
 --
 -- If the response is anything other than 'SubCorrect Nothing', it is returned
 -- unchanged.

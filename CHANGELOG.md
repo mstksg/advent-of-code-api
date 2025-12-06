@@ -4,12 +4,16 @@ Changelog
 Version 0.2.11.0
 ----------------
 
-*December 5, 2025*
+*December 6, 2025*
 
 <https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.11.0>
 
 *   Add endpoint for `<year>/stats` to get current star counts. Use with care,
     never cached.
+*   Add `inferSubmitRes`, `inferSubmitRes_` to add stats-based rank at time of
+    execution.
+*   Add `_aInferRankOnSubmission` (default `False`) to automatically tag your
+    `SubmitRes` with an inferred rank based on stats.
 
 Version 0.2.10.0
 ----------------
