@@ -57,6 +57,9 @@ module Advent (
   , AoCOpts(..)
   , AoCUserAgent(..)
   , SubmitRes(..), showSubmitRes
+  , statsForDayPart
+  , inferSubmitRes
+  , inferSubmitRes_
   , runAoC
   , runAoC_
   , defaultAoCOpts
@@ -429,6 +432,47 @@ runAoC AoCOpts{..} a = do
 -- @since 0.2.5.0
 runAoC_ :: AoCOpts -> AoC a -> IO a
 runAoC_ o = either throwIO pure <=< runAoC o
+
+-- | Extract the relevant completion count for a given part on a day's stats.
+--
+-- @since 0.2.11.0
+statsForDayPart :: Day -> Part -> Stats -> Integer
+statsForDayPart d Part1 = maybe 0 dsSilver . M.lookup d
+statsForDayPart d Part2 = maybe 0 dsGold   . M.lookup d
+
+-- | If an Advent of Code submission returns 'SubCorrect' without an attached
+-- rank, attempt to infer the rank from 'AoCStats'.
+--
+-- If the response is anything other than 'SubCorrect Nothing', it is returned
+-- unchanged.
+--
+-- @since 0.2.11.0
+inferSubmitRes
+    :: AoCOpts
+    -> Day
+    -> Part
+    -> SubmitRes
+    -> IO (Either AoCError SubmitRes)
+inferSubmitRes _ _ _ sr@(SubCorrect (Just _)) = pure $ Right sr
+inferSubmitRes opts d p (SubCorrect Nothing) = do
+    stats <- runAoC opts AoCStats
+    pure $ stats >>= \st ->
+      case M.lookup d st of
+        Just _  -> Right . SubCorrect . Just $ statsForDayPart d p st
+        Nothing -> Right $ SubCorrect Nothing
+inferSubmitRes _ _ _ sr = pure $ Right sr
+
+-- | Variant of 'inferSubmitRes' that returns the original response if stats
+-- lookup fails.
+--
+-- @since 0.2.11.0
+inferSubmitRes_
+    :: AoCOpts
+    -> Day
+    -> Part
+    -> SubmitRes
+    -> IO SubmitRes
+inferSubmitRes_ opts d p sr = either (const sr) id <$> inferSubmitRes opts d p sr
 
 aocClientEnv :: String -> IO ClientEnv
 aocClientEnv s = do
