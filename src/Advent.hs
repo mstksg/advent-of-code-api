@@ -321,6 +321,10 @@ data AoCOpts = AoCOpts
       -- | Throttle delay, in milliseconds.  Minimum is 1000000.  Default
       -- is 3000000 (3 seconds).
     , _aThrottle   :: Int
+      -- | Attempt to infer submission rank by fetching stats after a
+      -- correct submission that doesn't include rank information.
+      -- Default is False.
+    , _aInferRankOnSubmission :: Bool
     }
   deriving (Show, Typeable, Generic)
 
@@ -341,6 +345,7 @@ defaultAoCOpts aua y s = AoCOpts
     , _aCache      = Nothing
     , _aForce      = False
     , _aThrottle   = 3000000
+    , _aInferRankOnSubmission = False
     }
 
 -- | HTTPS base of Advent of Code API.
@@ -393,7 +398,7 @@ apiCache sess yr = \case
 -- of leading and trailing whitespace and run through 'URI.encode'
 -- before submitting.
 runAoC :: AoCOpts -> AoC a -> IO (Either AoCError a)
-runAoC AoCOpts{..} a = do
+runAoC opts@AoCOpts{..} a = do
     (keyMayb, cacheDir) <- case _aCache of
       Just c  -> pure (Nothing, c)
       Nothing -> (Just _aSessionKey,) . (</> "advent-of-code-api") <$> getTemporaryDirectory
@@ -424,7 +429,12 @@ runAoC AoCOpts{..} a = do
            . throttling aocThrottler (max 1000000 _aThrottle)
            $ runClientM (aocReq (Just _aUserAgent) _aYear a) =<< aocClientEnv _aSessionKey
       mcr <- maybe (throwError AoCThrottleError) pure mtr
-      either (throwError . AoCClientError) pure mcr
+      res <- either (throwError . AoCClientError) pure mcr
+      case (a, _aInferRankOnSubmission, res) of
+        (AoCSubmit d p _, True, (txt, sr)) -> do
+          sr' <- liftIO $ inferSubmitRes_ opts d p sr
+          pure (txt, sr')
+        _ -> pure res
 
 -- | A version of 'runAoC' that throws an IO exception (of type 'AoCError')
 -- upon failure, instead of an 'Either'.
