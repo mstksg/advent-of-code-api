@@ -159,18 +159,28 @@ data Leaderboard = LB
     { lbEvent   :: Integer                        -- ^ The year of the event
     , lbOwnerId :: Integer                        -- ^ The Member ID of the owner, or the public code
     , lbMembers :: Map Integer LeaderboardMember  -- ^ A map from member IDs to their leaderboard info
+    , lbNumDays :: Int                            -- ^ The number of days in this event.  25 for all
+                                                  --   years until 2025, which changed to 12.
+                                                  --
+                                                  --   @since 0.2.12.0
+    , lbDay1Ts  :: UTCTime                        -- ^ Release time of day 1 for this event.
+                                                  --
+                                                  --   @since 0.2.12.0
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Leaderboard position for a given member.
 data LeaderboardMember = LBM
-    { lbmGlobalScore :: Maybe Integer               -- ^ Global leaderboard score
-    , lbmName        :: Maybe Text                  -- ^ Username, if user specifies one
-    , lbmLocalScore  :: Integer                     -- ^ Score for this leaderboard
-    , lbmId          :: Integer                     -- ^ Member ID
-    , lbmLastStarTS  :: Maybe UTCTime               -- ^ Time of last puzzle solved, if any
-    , lbmStars       :: Int                         -- ^ Number of stars (puzzle parts) solved
-    , lbmCompletion  :: Map Day (Map Part UTCTime)  -- ^ Completion times of each day and puzzle part
+    { lbmGlobalScore  :: Maybe Integer               -- ^ Global leaderboard score
+    , lbmName         :: Maybe Text                  -- ^ Username, if user specifies one
+    , lbmLocalScore   :: Integer                     -- ^ Score for this leaderboard
+    , lbmId           :: Integer                     -- ^ Member ID
+    , lbmLastStarTS   :: Maybe UTCTime               -- ^ Time of last puzzle solved, if any
+    , lbmStars        :: Int                         -- ^ Number of stars (puzzle parts) solved
+    , lbmCompletion   :: Map Day (Map Part UTCTime)  -- ^ Completion times of each day and puzzle part
+    , lbmStarIndex    :: Map Day (Map Part Int)      -- ^ Board-wide chronological sequence number of
+                                                     --   each completion, in the same shape as
+                                                     --   'lbmCompletion'.
     }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
@@ -297,13 +307,18 @@ instance FromJSON Leaderboard where
         LB <$> (strInt =<< (o .: "event"))
            <*> o .: "owner_id"
            <*> o .: "members"
+           <*> o .: "num_days"
+           <*> ( (fromEpochText   =<< (o .: "day1_ts"))
+             <|> (fromEpochNumber <$> (o .: "day1_ts"))
+               )
       where
         strInt t = case readMaybe t of
           Nothing -> fail "bad int"
           Just i  -> pure i
 
 instance FromJSON LeaderboardMember where
-    parseJSON = withObject "LeaderboardMember" $ \o ->
+    parseJSON = withObject "LeaderboardMember" $ \o -> do
+        cdl <- o .: "completion_day_level"
         LBM <$> optional (o .: "global_score")
             <*> optional (o .: "name")
             <*> o .: "local_score"
@@ -313,17 +328,20 @@ instance FromJSON LeaderboardMember where
                 <|> (fromEpochNumber <$> (o .: "last_star_ts"))
                 )
             <*> o .: "stars"
-            <*> (do cdl <- o .: "completion_day_level"
-                    (traverse . traverse) (\c ->
-                          (fromEpochText   =<< (c .: "get_star_ts"))
-                      <|> (fromEpochNumber <$> (c .: "get_star_ts"))
-                      ) cdl
-                )
-      where
-        fromEpochText t = case readMaybe t of
-          Nothing -> fail "bad stamp"
-          Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
-        fromEpochNumber = posixSecondsToUTCTime
+            <*> (traverse . traverse) (\c ->
+                      (fromEpochText   =<< (c .: "get_star_ts"))
+                  <|> (fromEpochNumber <$> (c .: "get_star_ts"))
+                  ) cdl
+            <*> (traverse . traverse) (.: "star_index") cdl
+
+-- | Parse a Unix epoch timestamp given as either a string or a number.
+fromEpochText :: String -> Parser UTCTime
+fromEpochText t = case readMaybe t of
+  Nothing -> fail "bad stamp"
+  Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
+
+fromEpochNumber :: NominalDiffTime -> UTCTime
+fromEpochNumber = posixSecondsToUTCTime
 
 -- | @since 0.2.4.2
 instance ToJSONKey Day where
