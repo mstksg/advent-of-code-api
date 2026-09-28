@@ -8,6 +8,10 @@ Version 0.2.12.0
     and `day1_ts` fields of the private leaderboard JSON.
 *   Add `lbmStarIndex` to `LeaderboardMember`, parsed from the `star_index`
     field alongside each completion's `get_star_ts`.
+*   The `session` cookie is now an explicit `Header "Cookie"` in
+    `AdventAPI` via servant, scoped only to the endpoints that actually need it
+    (optional for `day` prompt, required for `input`/`answer`/private
+    leaderboard). Adds `SessionKey`, re-exported from `Advent`.
 
 Version 0.2.11.0
 ----------------

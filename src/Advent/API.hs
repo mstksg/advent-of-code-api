@@ -36,6 +36,8 @@ module Advent.API (
   -- * Servant API
     AdventAPI
   , AoCUserAgent(..)
+  , SessionKey(..)
+  , dummyToken
   , adventAPI
   , adventAPIClient
   , adventAPIPuzzleClient
@@ -246,18 +248,33 @@ data AoCUserAgent = AoCUserAgent
 instance ToHttpApiData AoCUserAgent where
   toQueryParam AoCUserAgent{..} = _auaRepo <> " " <> _auaEmail
 
--- | REST API of Advent of Code.
+-- | An AoC @session@ cookie value. See README and docs for how to get this.
 --
--- Note that most of these requests assume a "session=" cookie.
+-- @since 0.2.12.0
+newtype SessionKey = SessionKey { getSessionKey :: Text }
+  deriving (Show, Eq, Ord)
+
+instance ToHttpApiData SessionKey where
+  toQueryParam (SessionKey s) = "session=" <> s
+
+-- | Placeholder used when a 'Required' 'SessionKey' is needed but none was
+-- given.
+dummyToken :: SessionKey
+dummyToken = SessionKey T.empty
+
+-- | REST API of Advent of Code.
 type AdventAPI =
       Header "User-Agent" AoCUserAgent
    :> Capture "year" Integer
    :> (Get '[Scripts] NextDayTime
   :<|> "stats" :> Get '[Pres] Stats
   :<|> "day" :> Capture "day" Day
-             :> (Get '[Articles] (Map Part Text)
-            :<|> "input" :> Get '[RawText] Text
+             :> (      Header "Cookie" SessionKey
+                     :> Get '[Articles] (Map Part Text)
+            :<|> "input" :> Header' '[Required, Strict] "Cookie" SessionKey
+                         :> Get '[RawText] Text
             :<|> "answer"
+                     :> Header' '[Required, Strict] "Cookie" SessionKey
                      :> ReqBody '[FormUrlEncoded] SubmitInfo
                      :> Post    '[Articles] (Text :<|> SubmitRes)
                 )
@@ -265,6 +282,7 @@ type AdventAPI =
     :> (Get '[Divs] GlobalLeaderboard
    :<|> "day"     :> Capture "day" Day :> Get '[Divs] DailyLeaderboard
    :<|> "private" :> "view"
+                  :> Header' '[Required, Strict] "Cookie" SessionKey
                   :> Capture "code" PublicCode
                   :> Get '[JSON] Leaderboard
        ))
@@ -281,10 +299,13 @@ adventAPIClient
     -> Integer
     -> ClientM NextDayTime
   :<|> ClientM Stats
-  :<|> (Day -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes)) )
+  :<|> (Day -> (Maybe SessionKey -> ClientM (Map Part Text))
+             :<|> (SessionKey -> ClientM Text)
+             :<|> (SessionKey -> SubmitInfo -> ClientM (Text :<|> SubmitRes))
+       )
   :<|> ClientM GlobalLeaderboard
   :<|> (Day -> ClientM DailyLeaderboard)
-  :<|> (PublicCode -> ClientM Leaderboard)
+  :<|> (SessionKey -> PublicCode -> ClientM Leaderboard)
 adventAPIClient = client adventAPI
 
 -- | A subset of 'adventAPIClient' for only puzzle-related API routes, not
@@ -293,7 +314,9 @@ adventAPIPuzzleClient
     :: Maybe AoCUserAgent
     -> Integer
     -> Day
-    -> ClientM (Map Part Text) :<|> ClientM Text :<|> (SubmitInfo -> ClientM (Text :<|> SubmitRes))
+    -> (Maybe SessionKey -> ClientM (Map Part Text))
+       :<|> (SessionKey -> ClientM Text)
+       :<|> (SessionKey -> SubmitInfo -> ClientM (Text :<|> SubmitRes))
 adventAPIPuzzleClient aua y = pis
   where
     _ :<|> _ :<|> pis :<|> _ = adventAPIClient aua y

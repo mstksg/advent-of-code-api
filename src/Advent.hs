@@ -56,6 +56,7 @@ module Advent (
   , Stats
   , AoCOpts(..)
   , AoCUserAgent(..)
+  , SessionKey(..)
   , SubmitRes(..), showSubmitRes
   , statsForDayPart
   , inferSubmitRes
@@ -88,7 +89,6 @@ import           Advent.API
 import           Advent.Cache
 import           Advent.Throttle
 import           Advent.Types
-import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
@@ -100,7 +100,6 @@ import           Data.Text               (Text)
 import           Data.Time hiding        (Day)
 import           Data.Typeable
 import           GHC.Generics            (Generic)
-import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 import           Servant.API
 import           Servant.Client
@@ -111,10 +110,8 @@ import qualified Data.Aeson              as A
 import qualified Data.Map                as M
 import qualified Data.Set                as S
 import qualified Data.Text               as T
-import qualified Data.Text.Encoding      as T
 import qualified Data.Text.Lazy          as TL
 import qualified Data.Text.Lazy.Encoding as TL
-import qualified Servant.Client          as Servant
 import qualified System.IO.Unsafe        as Unsafe
 
 #if MIN_VERSION_mtl(2,3,0)
@@ -353,14 +350,14 @@ aocBase :: BaseUrl
 aocBase = BaseUrl Https "adventofcode.com" 443 ""
 
 -- | 'ClientM' request for a given 'AoC' API call.
-aocReq :: Maybe AoCUserAgent -> Integer -> AoC a -> ClientM a
-aocReq aua yr = \case
-    AoCPrompt i       -> let r :<|> _        = adventAPIPuzzleClient aua yr i in r
-    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r
+aocReq :: Maybe AoCUserAgent -> Maybe SessionKey -> Integer -> AoC a -> ClientM a
+aocReq aua sess yr = \case
+    AoCPrompt i       -> let r :<|> _ :<|> _ = adventAPIPuzzleClient aua yr i in r sess
+    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r (reqSess sess)
     AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
-                         in  r (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
+                         in  r (reqSess sess) (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
     AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
-                         in  r (PublicCode c)
+                         in  r (reqSess sess) (PublicCode c)
     AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
                              in  r d
     AoCGlobalLeaderboard  -> let _ :<|> _ :<|> _ :<|> r :<|> _ :<|> _ = adventAPIClient aua yr
@@ -369,6 +366,8 @@ aocReq aua yr = \case
                              in  r
     AoCStats              -> let _ :<|> r :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
                              in  r
+  where
+    reqSess = fromMaybe dummyToken
 
 
 -- | Cache file for a given 'AoC' command
@@ -425,9 +424,10 @@ runAoC opts@AoCOpts{..} a = do
         when (rel > 0) $
           throwError $ AoCReleaseError rel
 
+      let sess = SessionKey (T.pack _aSessionKey)
       mtr <- liftIO
            . throttling aocThrottler (max 1000000 _aThrottle)
-           $ runClientM (aocReq (Just _aUserAgent) _aYear a) =<< aocClientEnv _aSessionKey
+           $ runClientM (aocReq (Just _aUserAgent) (Just sess) _aYear a) =<< aocClientEnv
       mcr <- maybe (throwError AoCThrottleError) pure mtr
       res <- either (throwError . AoCClientError) pure mcr
       case (a, _aInferRankOnSubmission, res) of
@@ -485,29 +485,8 @@ inferSubmitRes_
     -> IO SubmitRes
 inferSubmitRes_ opts d p sr = either (const sr) id <$> inferSubmitRes opts d p sr
 
-aocClientEnv :: String -> IO ClientEnv
-aocClientEnv s = do
-    t <- getCurrentTime
-    v <- atomically . newTVar $ createCookieJar [c t]
-    mgr <- newTlsManager
-    pure $ (mkClientEnv mgr aocBase)
-        { Servant.cookieJar = Just v }
-  where
-    c t = Cookie
-      { cookie_name             = "session"
-      , cookie_value            = T.encodeUtf8 . T.pack $ s
-      , cookie_expiry_time      = addUTCTime oneYear t
-      , cookie_domain           = "adventofcode.com"
-      , cookie_path             = "/"
-      , cookie_creation_time    = t
-      , cookie_last_access_time = t
-      , cookie_persistent       = True
-      , cookie_host_only        = True
-      , cookie_secure_only      = True
-      , cookie_http_only        = True
-      }
-    oneYear = 60 * 60 * 24 * 356.25
-
+aocClientEnv :: IO ClientEnv
+aocClientEnv = (`mkClientEnv` aocBase) <$> newTlsManager
 
 saverLoader
     :: Bool             -- ^ is there a non-empty session token?

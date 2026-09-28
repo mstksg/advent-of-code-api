@@ -334,7 +334,6 @@ instance FromJSON LeaderboardMember where
                   ) cdl
             <*> (traverse . traverse) (.: "star_index") cdl
 
--- | Parse a Unix epoch timestamp given as either a string or a number.
 fromEpochText :: String -> Parser UTCTime
 fromEpochText t = case readMaybe t of
   Nothing -> fail "bad stamp"
