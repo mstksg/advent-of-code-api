@@ -159,8 +159,8 @@ data Leaderboard = LB
     { lbEvent   :: Integer                        -- ^ The year of the event
     , lbOwnerId :: Integer                        -- ^ The Member ID of the owner, or the public code
     , lbMembers :: Map Integer LeaderboardMember  -- ^ A map from member IDs to their leaderboard info
-    , lbNumDays :: Int                            -- ^ The number of days in this event.  25 for all
-                                                  --   years until 2025, which changed to 12.
+    , lbNumDays :: Int                            -- ^ The number of days in this event: 25 for
+                                                  --   years before 2025, 12 from 2025 onward.
                                                   --
                                                   --   @since 0.2.12.0
     , lbDay1Ts  :: UTCTime                        -- ^ Release time of day 1 for this event.
