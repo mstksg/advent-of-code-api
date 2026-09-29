@@ -1,18 +1,18 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      : Advent.Types
@@ -26,66 +26,69 @@
 -- Data types used for the underlying API.
 --
 -- @since 0.2.3.0
---
-
 module Advent.Types (
   -- * Types
-    Day(..)
-  , Part(..)
-  , SubmitInfo(..)
-  , SubmitRes(..), showSubmitRes
-  , PublicCode(..)
-  , Leaderboard(..)
-  , LeaderboardMember(..)
-  , Rank(..)
-  , DailyLeaderboard(..)
-  , DailyLeaderboardMember(..)
-  , GlobalLeaderboard(..)
-  , GlobalLeaderboardMember(..)
-  , NextDayTime(..)
-  , DayStats(..)
-  , Stats
+  Day (..),
+  Part (..),
+  SubmitInfo (..),
+  SubmitRes (..),
+  showSubmitRes,
+  PublicCode (..),
+  Leaderboard (..),
+  LeaderboardMember (..),
+  Rank (..),
+  DailyLeaderboard (..),
+  DailyLeaderboardMember (..),
+  GlobalLeaderboard (..),
+  GlobalLeaderboardMember (..),
+  NextDayTime (..),
+  DayStats (..),
+  Stats,
+
   -- * Util
-  , mkDay, mkDay_, dayInt
-  , _DayInt, pattern DayInt
-  , partInt
-  , partChar
-  , fullDailyBoard
-  , dlbmCompleteTime
-  , dlbmTime
-  , challengeReleaseTime
+  mkDay,
+  mkDay_,
+  dayInt,
+  _DayInt,
+  pattern DayInt,
+  partInt,
+  partChar,
+  fullDailyBoard,
+  dlbmCompleteTime,
+  dlbmTime,
+  challengeReleaseTime,
+
   -- * Internal
-  , parseSubmitRes
-  ) where
+  parseSubmitRes,
+) where
 
-import           Control.Applicative
-import           Data.Aeson
-import           Data.Aeson.Types
-import           Data.Bifunctor
-import           Data.Char
-import           Data.Finite
-import           Data.Functor.Classes
-import           Data.List.NonEmpty         (NonEmpty(..))
-import           Data.Map                   (Map)
-import           Data.Maybe
-import           Data.Profunctor
-import           Data.Text                  (Text)
-import           Data.Time hiding           (Day)
-import           Data.Time.Clock.POSIX
-import           Data.Typeable
-import           Data.Void
-import           GHC.Generics
-import           Servant.API
-import           Text.Printf
-import           Text.Read                  (readMaybe)
-import qualified Data.Map                   as M
-import qualified Data.Text                  as T
-import qualified Text.HTML.TagSoup          as H
-import qualified Text.Megaparsec            as P
-import qualified Text.Megaparsec.Char       as P
+import Control.Applicative
+import Data.Aeson
+import Data.Aeson.Types
+import Data.Bifunctor
+import Data.Char
+import Data.Finite
+import Data.Functor.Classes
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map (Map)
+import qualified Data.Map as M
+import Data.Maybe
+import Data.Profunctor
+import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Time hiding (Day)
+import Data.Time.Clock.POSIX
+import Data.Typeable
+import Data.Void
+import GHC.Generics
+import Servant.API
+import qualified Text.HTML.TagSoup as H
+import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
-import qualified Web.FormUrlEncoded         as WF
-
+import Text.Printf
+import Text.Read (readMaybe)
+import qualified Web.FormUrlEncoded as WF
 
 #if !MIN_VERSION_base(4,16,0)
 import           Data.Foldable              (asum)
@@ -103,11 +106,11 @@ import           Data.Time.LocalTime.Compat
 --
 -- Represented by a 'Finite' ranging from 0 to 24 inclusive; you should
 -- probably make one using the smart constructor 'mkDay'.
-newtype Day = Day { dayFinite :: Finite 25 }
+newtype Day = Day {dayFinite :: Finite 25}
   deriving (Eq, Ord, Enum, Bounded, Typeable, Generic)
 
 instance Show Day where
-    showsPrec = showsUnaryWith (\d -> showsPrec d . dayInt) "mkDay"
+  showsPrec = showsUnaryWith (\d -> showsPrec d . dayInt) "mkDay"
 
 -- | A given part of a problem.  All Advent of Code challenges are
 -- two-parts.
@@ -119,30 +122,30 @@ data Part = Part1 | Part2
 
 -- | Info required to submit an answer for a part.
 data SubmitInfo = SubmitInfo
-    { siLevel  :: Part
-    , siAnswer :: String
-    }
+  { siLevel :: Part
+  , siAnswer :: String
+  }
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
 -- | The result of a submission.
 data SubmitRes
-    -- | Correct submission, including global rank (if reported, which
+  = -- | Correct submission, including global rank (if reported, which
     -- usually happens if rank is under 1000)
-    = SubCorrect (Maybe Integer)
-    -- | Incorrect submission.  Contains the number of /seconds/ you must
+    SubCorrect (Maybe Integer)
+  | -- | Incorrect submission.  Contains the number of /seconds/ you must
     -- wait before trying again.  The 'Maybe' contains possible hints given
     -- by the server (usually "too low" or "too high").
-    | SubIncorrect Int (Maybe String)
-    -- | Submission was rejected because an incorrect submission was
+    SubIncorrect Int (Maybe String)
+  | -- | Submission was rejected because an incorrect submission was
     -- recently submitted.  Contains the number of /seconds/ you must wait
     -- before trying again.
-    | SubWait Int
-    -- | Submission was rejected because it was sent to an invalid question
+    SubWait Int
+  | -- | Submission was rejected because it was sent to an invalid question
     -- or part.  Usually happens if you submit to a part you have already
     -- answered or have not yet unlocked.
-    | SubInvalid
-    -- | Could not parse server response.  Contains parse error.
-    | SubUnknown String
+    SubInvalid
+  | -- | Could not parse server response.  Contains parse error.
+    SubUnknown String
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
 -- | Member ID of public leaderboard (the first part of the registration
@@ -151,37 +154,50 @@ data SubmitRes
 -- > https://adventofcode.com/2019/leaderboard/private/view/12345
 --
 -- (the @12345@ above)
-newtype PublicCode = PublicCode { getPublicCode :: Integer }
+newtype PublicCode = PublicCode {getPublicCode :: Integer}
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
 -- | Leaderboard type, representing private leaderboard information.
 data Leaderboard = LB
-    { lbEvent   :: Integer                        -- ^ The year of the event
-    , lbOwnerId :: Integer                        -- ^ The Member ID of the owner, or the public code
-    , lbMembers :: Map Integer LeaderboardMember  -- ^ A map from member IDs to their leaderboard info
-    , lbNumDays :: Int                            -- ^ The number of days in this event: 25 for
-                                                  --   years before 2025, 12 from 2025 onward.
-                                                  --
-                                                  --   @since 0.2.12.0
-    , lbDay1Ts  :: UTCTime                        -- ^ Release time of day 1 for this event.
-                                                  --
-                                                  --   @since 0.2.12.0
-    }
+  { lbEvent :: Integer
+  -- ^ The year of the event
+  , lbOwnerId :: Integer
+  -- ^ The Member ID of the owner, or the public code
+  , lbMembers :: Map Integer LeaderboardMember
+  -- ^ A map from member IDs to their leaderboard info
+  , lbNumDays :: Int
+  -- ^ The number of days in this event: 25 for
+  --   years before 2025, 12 from 2025 onward.
+  --
+  --   @since 0.2.12.0
+  , lbDay1Ts :: UTCTime
+  -- ^ Release time of day 1 for this event.
+  --
+  --   @since 0.2.12.0
+  }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Leaderboard position for a given member.
 data LeaderboardMember = LBM
-    { lbmGlobalScore  :: Maybe Integer               -- ^ Global leaderboard score
-    , lbmName         :: Maybe Text                  -- ^ Username, if user specifies one
-    , lbmLocalScore   :: Integer                     -- ^ Score for this leaderboard
-    , lbmId           :: Integer                     -- ^ Member ID
-    , lbmLastStarTS   :: Maybe UTCTime               -- ^ Time of last puzzle solved, if any
-    , lbmStars        :: Int                         -- ^ Number of stars (puzzle parts) solved
-    , lbmCompletion   :: Map Day (Map Part UTCTime)  -- ^ Completion times of each day and puzzle part
-    , lbmStarIndex    :: Map Day (Map Part Int)      -- ^ Board-wide chronological sequence number of
-                                                     --   each completion, in the same shape as
-                                                     --   'lbmCompletion'.
-    }
+  { lbmGlobalScore :: Maybe Integer
+  -- ^ Global leaderboard score
+  , lbmName :: Maybe Text
+  -- ^ Username, if user specifies one
+  , lbmLocalScore :: Integer
+  -- ^ Score for this leaderboard
+  , lbmId :: Integer
+  -- ^ Member ID
+  , lbmLastStarTS :: Maybe UTCTime
+  -- ^ Time of last puzzle solved, if any
+  , lbmStars :: Int
+  -- ^ Number of stars (puzzle parts) solved
+  , lbmCompletion :: Map Day (Map Part UTCTime)
+  -- ^ Completion times of each day and puzzle part
+  , lbmStarIndex :: Map Day (Map Part Int)
+  -- ^ Board-wide chronological sequence number of
+  --   each completion, in the same shape as
+  --   'lbmCompletion'.
+  }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Ranking between 1 to 100, for daily and global leaderboards
@@ -190,25 +206,25 @@ data LeaderboardMember = LBM
 -- to add or subtract accordingly if you want to display or parse it.
 --
 -- @since 0.2.3.0
-newtype Rank = Rank { getRank :: Finite 100 }
+newtype Rank = Rank {getRank :: Finite 100}
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Single daily leaderboard position
 --
 -- @since 0.2.3.0
 data DailyLeaderboardMember = DLBM
-    { dlbmRank      :: Rank
-    -- | Time from midnight EST of December 1st for that event.  Use
-    -- 'dlbmCompleteTime' to convert to an actual time for event
-    -- completion, and 'dlbmTime' to get the time it took to solve.
-    --
-    -- @since 0.2.7.0
-    , dlbmDecTime   :: NominalDiffTime
-    , dlbmUser      :: Either Integer Text
-    , dlbmLink      :: Maybe Text
-    , dlbmImage     :: Maybe Text
-    , dlbmSupporter :: Bool
-    }
+  { dlbmRank :: Rank
+  , dlbmDecTime :: NominalDiffTime
+  -- ^ Time from midnight EST of December 1st for that event.  Use
+  -- 'dlbmCompleteTime' to convert to an actual time for event
+  -- completion, and 'dlbmTime' to get the time it took to solve.
+  --
+  -- @since 0.2.7.0
+  , dlbmUser :: Either Integer Text
+  , dlbmLink :: Maybe Text
+  , dlbmImage :: Maybe Text
+  , dlbmSupporter :: Bool
+  }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Turn a 'dlbmDecTime' field into a 'ZonedTime' for the actual
@@ -216,7 +232,8 @@ data DailyLeaderboardMember = DLBM
 --
 -- @since 0.2.7.0
 dlbmCompleteTime :: Integer -> Day -> NominalDiffTime -> ZonedTime
-dlbmCompleteTime y d t = r
+dlbmCompleteTime y d t =
+  r
     { zonedTimeToLocalTime = dlbmTime d t `addLocalTime` zonedTimeToLocalTime r
     }
   where
@@ -227,15 +244,16 @@ dlbmCompleteTime y d t = r
 --
 -- @since 0.2.7.0
 dlbmTime :: Day -> NominalDiffTime -> NominalDiffTime
-dlbmTime d = uncurry daysAndTimeOfDayToTime
-           . first (subtract (dayInt d - 1))
-           . timeToDaysAndTimeOfDay
+dlbmTime d =
+  uncurry daysAndTimeOfDayToTime
+    . first (subtract (dayInt d - 1))
+    . timeToDaysAndTimeOfDay
 
 -- | Daily leaderboard, containing Star 1 and Star 2 completions
 --
 -- @since 0.2.3.0
-data DailyLeaderboard = DLB {
-    dlbStar1 :: Map Rank DailyLeaderboardMember
+data DailyLeaderboard = DLB
+  { dlbStar1 :: Map Rank DailyLeaderboardMember
   , dlbStar2 :: Map Rank DailyLeaderboardMember
   }
   deriving (Show, Eq, Ord, Typeable, Generic)
@@ -244,13 +262,13 @@ data DailyLeaderboard = DLB {
 --
 -- @since 0.2.3.0
 data GlobalLeaderboardMember = GLBM
-    { glbmRank      :: Rank
-    , glbmScore     :: Integer
-    , glbmUser      :: Either Integer Text
-    , glbmLink      :: Maybe Text
-    , glbmImage     :: Maybe Text
-    , glbmSupporter :: Bool
-    }
+  { glbmRank :: Rank
+  , glbmScore :: Integer
+  , glbmUser :: Either Integer Text
+  , glbmLink :: Maybe Text
+  , glbmImage :: Maybe Text
+  , glbmSupporter :: Bool
+  }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Global leaderboard for the entire event
@@ -259,8 +277,8 @@ data GlobalLeaderboardMember = GLBM
 -- a non-empty list of all members who achieved that rank and score.
 --
 -- @since 0.2.3.0
-newtype GlobalLeaderboard = GLB {
-    glbMap :: Map Rank (Integer, NonEmpty GlobalLeaderboardMember)
+newtype GlobalLeaderboard = GLB
+  { glbMap :: Map Rank (Integer, NonEmpty GlobalLeaderboardMember)
   }
   deriving (Show, Eq, Ord, Typeable, Generic)
 
@@ -268,17 +286,20 @@ newtype GlobalLeaderboard = GLB {
 -- seconds until the challenge is released.
 --
 -- @since 0.2.8.0
-data NextDayTime = NextDayTime Day Int
-                 | NoNextDayTime
+data NextDayTime
+  = NextDayTime Day Int
+  | NoNextDayTime
   deriving (Show, Eq, Ord, Typeable, Generic)
 
 -- | Stats for a single day on the event stats page.
 --
 -- @since 0.2.11.0
 data DayStats = DayStats
-    { dsGold   :: Integer   -- ^ Users who completed both parts
-    , dsSilver :: Integer   -- ^ Users who only completed the first part
-    }
+  { dsGold :: Integer
+  -- ^ Users who completed both parts
+  , dsSilver :: Integer
+  -- ^ Users who only completed the first part
+  }
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
 -- | Stats for all days on the event stats page.
@@ -287,152 +308,191 @@ data DayStats = DayStats
 type Stats = Map Day DayStats
 
 instance ToHttpApiData Part where
-    toUrlPiece = T.pack . show . partInt
-    toQueryParam = toUrlPiece
+  toUrlPiece = T.pack . show . partInt
+  toQueryParam = toUrlPiece
 
 instance ToHttpApiData Day where
-    toUrlPiece = T.pack . show . dayInt
-    toQueryParam = toUrlPiece
+  toUrlPiece = T.pack . show . dayInt
+  toQueryParam = toUrlPiece
 
 instance ToHttpApiData PublicCode where
-    toUrlPiece   = (<> ".json") . T.pack . show . getPublicCode
-    toQueryParam = toUrlPiece
+  toUrlPiece = (<> ".json") . T.pack . show . getPublicCode
+  toQueryParam = toUrlPiece
 
 instance WF.ToForm SubmitInfo where
-    toForm = WF.genericToForm WF.FormOptions
-      { WF.fieldLabelModifier = camelTo2 '-' . drop 2 }
+  toForm =
+    WF.genericToForm
+      WF.FormOptions
+        { WF.fieldLabelModifier = camelTo2 '-' . drop 2
+        }
 
 instance FromJSON Leaderboard where
-    parseJSON = withObject "Leaderboard" $ \o ->
-        LB <$> (strInt =<< (o .: "event"))
-           <*> o .: "owner_id"
-           <*> o .: "members"
-           <*> o .: "num_days"
-           <*> ( (fromEpochText   =<< (o .: "day1_ts"))
-             <|> (fromEpochNumber <$> (o .: "day1_ts"))
-               )
-      where
-        strInt t = case readMaybe t of
-          Nothing -> fail "bad int"
-          Just i  -> pure i
+  parseJSON = withObject "Leaderboard" $ \o ->
+    LB
+      <$> (strInt =<< (o .: "event"))
+      <*> o .: "owner_id"
+      <*> o .: "members"
+      <*> o .: "num_days"
+      <*> ( (fromEpochText =<< (o .: "day1_ts"))
+              <|> (fromEpochNumber <$> (o .: "day1_ts"))
+          )
+    where
+      strInt t = case readMaybe t of
+        Nothing -> fail "bad int"
+        Just i -> pure i
 
 instance FromJSON LeaderboardMember where
-    parseJSON = withObject "LeaderboardMember" $ \o -> do
-        cdl <- o .: "completion_day_level"
-        LBM <$> optional (o .: "global_score")
-            <*> optional (o .: "name")
-            <*> o .: "local_score"
-            <*> o .: "id"
-            <*> optional (
-                    (fromEpochText   =<< (o .: "last_star_ts"))
-                <|> (fromEpochNumber <$> (o .: "last_star_ts"))
-                )
-            <*> o .: "stars"
-            <*> (traverse . traverse) (\c ->
-                      (fromEpochText   =<< (c .: "get_star_ts"))
-                  <|> (fromEpochNumber <$> (c .: "get_star_ts"))
-                  ) cdl
-            <*> (traverse . traverse) (.: "star_index") cdl
+  parseJSON = withObject "LeaderboardMember" $ \o -> do
+    cdl <- o .: "completion_day_level"
+    LBM
+      <$> optional (o .: "global_score")
+      <*> optional (o .: "name")
+      <*> o .: "local_score"
+      <*> o .: "id"
+      <*> optional
+        ( (fromEpochText =<< (o .: "last_star_ts"))
+            <|> (fromEpochNumber <$> (o .: "last_star_ts"))
+        )
+      <*> o .: "stars"
+      <*> (traverse . traverse)
+        ( \c ->
+            (fromEpochText =<< (c .: "get_star_ts"))
+              <|> (fromEpochNumber <$> (c .: "get_star_ts"))
+        )
+        cdl
+      <*> (traverse . traverse) (.: "star_index") cdl
 
 fromEpochText :: String -> Parser UTCTime
 fromEpochText t = case readMaybe t of
   Nothing -> fail "bad stamp"
-  Just i  -> pure . posixSecondsToUTCTime $ fromInteger i
+  Just i -> pure . posixSecondsToUTCTime $ fromInteger i
 
 fromEpochNumber :: NominalDiffTime -> UTCTime
 fromEpochNumber = posixSecondsToUTCTime
 
 -- | @since 0.2.4.2
 instance ToJSONKey Day where
-    toJSONKey = toJSONKeyText $ T.pack . show . dayInt
+  toJSONKey = toJSONKeyText $ T.pack . show . dayInt
+
 instance FromJSONKey Day where
-    fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+  fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+
 -- | @since 0.2.4.2
 instance ToJSONKey Part where
-    toJSONKey = toJSONKeyText $ \case
-      Part1 -> "1"
-      Part2 -> "2"
+  toJSONKey = toJSONKeyText $ \case
+    Part1 -> "1"
+    Part2 -> "2"
+
 instance FromJSONKey Part where
-    fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+  fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
 
 -- | @since 0.2.4.2
 instance ToJSON Part where
-    toJSON = String . (\case Part1 -> "1"; Part2 -> "2")
+  toJSON = String . (\case Part1 -> "1"; Part2 -> "2")
+
 instance FromJSON Part where
-    parseJSON = withText "Part" $ \case
-      "1" -> pure Part1
-      "2" -> pure Part2
-      _   -> fail "Bad part"
+  parseJSON = withText "Part" $ \case
+    "1" -> pure Part1
+    "2" -> pure Part2
+    _ -> fail "Bad part"
 
 -- | @since 0.2.4.2
 instance ToJSON Day where
-    toJSON = String . T.pack . show . dayInt
+  toJSON = String . T.pack . show . dayInt
+
 instance FromJSON Day where
-    parseJSON = withText "Day" $ \t ->
-      case readMaybe (T.unpack t) of
-        Nothing -> fail "No read day"
-        Just i  -> case mkDay i of
-          Nothing -> fail "Day out of range"
-          Just d  -> pure d
+  parseJSON = withText "Day" $ \t ->
+    case readMaybe (T.unpack t) of
+      Nothing -> fail "No read day"
+      Just i -> case mkDay i of
+        Nothing -> fail "Day out of range"
+        Just d -> pure d
 
 instance ToJSONKey Rank where
-    toJSONKey = toJSONKeyText $ T.pack . show . (+ 1) . getFinite . getRank
+  toJSONKey = toJSONKeyText $ T.pack . show . (+ 1) . getFinite . getRank
 instance FromJSONKey Rank where
-    fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+  fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
 
 instance ToJSON Rank where
-    toJSON = String . T.pack . show . (+ 1) . getFinite . getRank
+  toJSON = String . T.pack . show . (+ 1) . getFinite . getRank
 instance FromJSON Rank where
-    parseJSON = withText "Rank" $ \t ->
-      case readMaybe (T.unpack t) of
-        Nothing -> fail "No read rank"
-        Just i  -> case packFinite (i - 1) of
-          Nothing -> fail "Rank out of range"
-          Just d  -> pure $ Rank d
+  parseJSON = withText "Rank" $ \t ->
+    case readMaybe (T.unpack t) of
+      Nothing -> fail "No read rank"
+      Just i -> case packFinite (i - 1) of
+        Nothing -> fail "Rank out of range"
+        Just d -> pure $ Rank d
 
 instance ToJSON DailyLeaderboard where
-    toJSON = genericToJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+  toJSON =
+    genericToJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3
+        }
 instance FromJSON DailyLeaderboard where
-    parseJSON = genericParseJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3
+        }
 
 instance ToJSON GlobalLeaderboard where
-    toJSON = genericToJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+  toJSON =
+    genericToJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3
+        }
 instance FromJSON GlobalLeaderboard where
-    parseJSON = genericParseJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 3 }
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 3
+        }
 
 instance ToJSON DailyLeaderboardMember where
-    toJSON = genericToJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+  toJSON =
+    genericToJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4
+        }
 instance FromJSON DailyLeaderboardMember where
-    parseJSON = genericParseJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4
+        }
 
 instance ToJSON GlobalLeaderboardMember where
-    toJSON = genericToJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+  toJSON =
+    genericToJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4
+        }
 instance FromJSON GlobalLeaderboardMember where
-    parseJSON = genericParseJSON defaultOptions
-        { fieldLabelModifier = camelTo2 '-' . drop 4 }
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = camelTo2 '-' . drop 4
+        }
 
 -- | Parse 'T.Text' into a 'SubmitRes'.
 parseSubmitRes :: Text -> SubmitRes
-parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
-               . P.runParser choices "Submission Response"
-               . mconcat
-               . mapMaybe deTag
-               . H.parseTags
+parseSubmitRes =
+  either (SubUnknown . P.errorBundlePretty) id
+    . P.runParser choices "Submission Response"
+    . mconcat
+    . mapMaybe deTag
+    . H.parseTags
   where
     deTag (H.TagText t) = Just t
-    deTag _             = Nothing
-    choices             = asum [ P.try parseCorrect   P.<?> "Correct"
-                               , P.try parseIncorrect P.<?> "Incorrect"
-                               , P.try parseWait      P.<?> "Wait"
-                               ,       parseInvalid   P.<?> "Invalid"
-                               ]
+    deTag _ = Nothing
+    choices =
+      asum
+        [ P.try parseCorrect P.<?> "Correct"
+        , P.try parseIncorrect P.<?> "Incorrect"
+        , P.try parseWait P.<?> "Wait"
+        , parseInvalid P.<?> "Invalid"
+        ]
     parseCorrect :: P.Parsec Void Text SubmitRes
     parseCorrect = do
       _ <- P.manyTill P.anySingle (P.string' "that's the right answer") P.<?> "Right answer"
@@ -452,8 +512,9 @@ parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
     parseWait = do
       _ <- P.manyTill P.anySingle (P.string' "an answer too recently") P.<?> "An answer too recently"
       P.skipMany (P.satisfy (not . isDigit))
-      m <- optional . (P.<?> "Delay minutes") . P.try $
-              P.decimal <* P.char 'm' <* P.space1
+      m <-
+        optional . (P.<?> "Delay minutes") . P.try $
+          P.decimal <* P.char 'm' <* P.space1
       s <- P.decimal <* P.char 's' P.<?> "Delay seconds"
       pure . SubWait $ maybe 0 (* 60) m + s
     parseInvalid = SubInvalid <$ P.manyTill P.anySingle (P.string' "solving the right level")
@@ -461,14 +522,15 @@ parseSubmitRes = either (SubUnknown . P.errorBundlePretty) id
 -- | Pretty-print a 'SubmitRes'
 showSubmitRes :: SubmitRes -> String
 showSubmitRes = \case
-    SubCorrect Nothing    -> "Correct"
-    SubCorrect (Just r)   -> printf "Correct (Rank %d)" r
-    SubIncorrect i Nothing  -> printf "Incorrect (%d minute wait)" (i `div` 60)
-    SubIncorrect i (Just h) -> printf "Incorrect (%s) (%d minute wait)" h (i `div` 60)
-    SubWait i             -> let (m,s) = i `divMod` 60
-                             in   printf "Wait (%d min %d sec wait)"  m s
-    SubInvalid            -> "Invalid"
-    SubUnknown r          -> printf "Unknown (%s)" r
+  SubCorrect Nothing -> "Correct"
+  SubCorrect (Just r) -> printf "Correct (Rank %d)" r
+  SubIncorrect i Nothing -> printf "Incorrect (%d minute wait)" (i `div` 60)
+  SubIncorrect i (Just h) -> printf "Incorrect (%s) (%d minute wait)" h (i `div` 60)
+  SubWait i ->
+    let (m, s) = i `divMod` 60
+     in printf "Wait (%d min %d sec wait)" m s
+  SubInvalid -> "Invalid"
+  SubUnknown r -> printf "Unknown (%s)" r
 
 -- | Convert a @'Finite' 25@ day into a day integer (1 - 25).  Inverse of
 -- 'mkDay'.
@@ -506,7 +568,7 @@ _DayInt :: (Choice p, Applicative f) => p Day (f Day) -> p Integer (f Integer)
 _DayInt = dimap a b . right'
   where
     a i = maybe (Left i) Right . mkDay $ i
-    b   = either pure (fmap dayInt)
+    b = either pure (fmap dayInt)
 
 -- | Pattern synonym allowing you to match on an 'Integer' as if it were
 -- a 'Day':
@@ -521,7 +583,7 @@ _DayInt = dimap a b . right'
 --
 -- @since 0.2.4.0
 pattern DayInt :: Day -> Integer
-pattern DayInt d <- (mkDay->Just d)
+pattern DayInt d <- (mkDay -> Just d)
   where
     DayInt d = dayInt d
 
@@ -534,24 +596,27 @@ partChar Part2 = 'b'
 -- | Check if a 'DailyLeaderboard' is filled up or not.
 --
 -- @since 0.2.4.0
-fullDailyBoard
-    :: DailyLeaderboard
-    -> Bool
+fullDailyBoard ::
+  DailyLeaderboard ->
+  Bool
 fullDailyBoard DLB{..} = (M.size dlbStar1 + M.size dlbStar2) >= 200
 
 -- | Prompt release time.
 --
 -- Changed from 'UTCTime' to 'ZonedTime' in v0.2.7.0.  To use as
 -- a 'UTCTime', use 'zonedTimeToUTC'.
-challengeReleaseTime
-    :: Integer              -- ^ year
-    -> Day                  -- ^ day
-    -> ZonedTime
-challengeReleaseTime y d = ZonedTime
-    { zonedTimeToLocalTime = LocalTime
-        { localDay       = fromGregorian y 12 (fromIntegral (dayInt d))
-        , localTimeOfDay = midnight
-        }
+challengeReleaseTime ::
+  -- | year
+  Integer ->
+  -- | day
+  Day ->
+  ZonedTime
+challengeReleaseTime y d =
+  ZonedTime
+    { zonedTimeToLocalTime =
+        LocalTime
+          { localDay = fromGregorian y 12 (fromIntegral (dayInt d))
+          , localTimeOfDay = midnight
+          }
     , zonedTimeZone = read "EST"
     }
-

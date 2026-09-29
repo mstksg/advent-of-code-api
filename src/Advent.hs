@@ -1,18 +1,18 @@
-{-# LANGUAGE CPP                #-}
-{-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE KindSignatures     #-}
-{-# LANGUAGE LambdaCase         #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE PatternSynonyms    #-}
-{-# LANGUAGE PolyKinds          #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TupleSections      #-}
-{-# LANGUAGE TypeApplications   #-}
-{-# LANGUAGE ViewPatterns       #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      : Advent
@@ -45,74 +45,87 @@
 -- Please use responsibly.  All actions are by default rate limited to one
 -- per three seconds, but this can be adjusted to a hard-limited cap of one
 -- per second.
-
 module Advent (
   -- * API
-    AoC(..)
-  , Part(..)
-  , Day(..)
-  , NextDayTime(..)
-  , DayStats(..)
-  , Stats
-  , AoCOpts(..)
-  , AoCUserAgent(..)
-  , SessionKey(..)
-  , SubmitRes(..), showSubmitRes
-  , statsForDayPart
-  , inferSubmitRes
-  , inferSubmitRes_
-  , runAoC
-  , runAoC_
-  , defaultAoCOpts
-  , AoCError(..)
-  -- ** Calendar
-  , challengeReleaseTime
-  , timeToRelease
-  , challengeReleased
-  -- * Utility
-  -- ** Day
-  , mkDay, mkDay_, dayInt, pattern DayInt, _DayInt
-  , aocDay
-  , aocServerTime
-  -- ** Part
-  , partChar, partInt
-  -- ** Leaderboard
-  , fullDailyBoard
-  -- ** Throttler
-  , setAoCThrottleLimit, getAoCThrottleLimit
-  -- * Internal
-  , aocReq
-  , aocBase
-  ) where
+  AoC (..),
+  Part (..),
+  Day (..),
+  NextDayTime (..),
+  DayStats (..),
+  Stats,
+  AoCOpts (..),
+  AoCUserAgent (..),
+  SessionKey (..),
+  SubmitRes (..),
+  showSubmitRes,
+  statsForDayPart,
+  inferSubmitRes,
+  inferSubmitRes_,
+  runAoC,
+  runAoC_,
+  defaultAoCOpts,
+  AoCError (..),
 
-import           Advent.API
-import           Advent.Cache
-import           Advent.Throttle
-import           Advent.Types
-import           Control.Exception
-import           Control.Monad
-import           Control.Monad.Except
-import           Data.Kind
-import           Data.Map                (Map)
-import           Data.Maybe
-import           Data.Set                (Set)
-import           Data.Text               (Text)
-import           Data.Time hiding        (Day)
-import           Data.Typeable
-import           GHC.Generics            (Generic)
-import           Network.HTTP.Client.TLS
-import           Servant.API
-import           Servant.Client
-import           System.Directory
-import           System.FilePath
-import           Text.Printf
-import qualified Data.Aeson              as A
-import qualified Data.Map                as M
-import qualified Data.Set                as S
-import qualified Data.Text               as T
-import qualified Data.Text.Lazy          as TL
+  -- ** Calendar
+  challengeReleaseTime,
+  timeToRelease,
+  challengeReleased,
+
+  -- * Utility
+
+  -- ** Day
+  mkDay,
+  mkDay_,
+  dayInt,
+  pattern DayInt,
+  _DayInt,
+  aocDay,
+  aocServerTime,
+
+  -- ** Part
+  partChar,
+  partInt,
+
+  -- ** Leaderboard
+  fullDailyBoard,
+
+  -- ** Throttler
+  setAoCThrottleLimit,
+  getAoCThrottleLimit,
+
+  -- * Internal
+  aocReq,
+  aocBase,
+) where
+
+import Advent.API
+import Advent.Cache
+import Advent.Throttle
+import Advent.Types
+import Control.Exception
+import Control.Monad
+import Control.Monad.Except
+import qualified Data.Aeson as A
+import Data.Kind
+import Data.Map (Map)
+import qualified Data.Map as M
+import Data.Maybe
+import Data.Set (Set)
+import qualified Data.Set as S
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
-import qualified System.IO.Unsafe        as Unsafe
+import Data.Time hiding (Day)
+import Data.Typeable
+import GHC.Generics (Generic)
+import Network.HTTP.Client.TLS
+import Servant.API
+import Servant.Client
+import System.Directory
+import System.FilePath
+import qualified System.IO.Unsafe as Unsafe
+import Text.Printf
 
 #if MIN_VERSION_mtl(2,3,0)
 import           Control.Monad.IO.Class (liftIO)
@@ -149,124 +162,117 @@ getAoCThrottleLimit = getLimit aocThrottler
 -- up to and including Christmas Day (December 25th).  You can convert an
 -- integer day (1 - 25) into a 'Day' using 'mkDay' or 'mkDay_'.
 data AoC :: Type -> Type where
-    -- | Fetch prompts for a given day.  Returns a 'Map' of 'Part's and
-    -- their associated promps, as HTML.
-    --
-    -- _Cacheing rules_: Is cached on a per-day basis.  An empty session
-    -- key is given, it will be happy with only having Part 1 cached.  If
-    -- a non-empty session key is given, it will trigger a cache
-    -- invalidation on every request until both Part 1 and Part 2 are
-    -- received.
-    AoCPrompt
-        :: Day
-        -> AoC (Map Part Text)
-
-    -- | Fetch input, as plaintext.  Returned verbatim.  Be aware that
-    -- input might contain trailing newlines.
-    --
-    -- /Cacheing rules/: Is cached forever, per day per session key.
-    AoCInput :: Day -> AoC Text
-
-    -- | Submit a plaintext answer (the 'String') to a given day and part.
-    -- Receive a server reponse (as HTML) and a response code 'SubmitRes'.
-    --
-    -- __WARNING__: Answers are not length-limited.  Answers are stripped
-    -- of leading and trailing whitespace and run through 'URI.encode'
-    -- before submitting.
-    --
-    -- /Cacheing rules/: Is never cached.
-    AoCSubmit
-        :: Day
-        -> Part
-        -> String
-        -> AoC (Text, SubmitRes)
-
-    -- | Fetch the leaderboard for a given leaderboard public code (owner
-    -- member ID).  Requires session key.
-    --
-    -- The public code can be found in the URL of the leaderboard:
-    --
-    -- > https://adventofcode.com/2019/leaderboard/private/view/12345
-    --
-    -- (the @12345@ above)
-    --
-    -- __NOTE__: This is the most expensive and taxing possible API call,
-    -- and makes up the majority of bandwidth to the Advent of Code
-    -- servers.  As a courtesy to all who are participating in Advent of
-    -- Code, please use this super respectfully, especially in December: if
-    -- you set up automation for this, please do not use it more than once
-    -- per day.
-    --
-    -- /Cacheing rules/: Is never cached, so please use responsibly (see
-    -- note above).
-    --
-    -- @since 0.2.0.0
-    AoCLeaderboard
-        :: Integer
-        -> AoC Leaderboard
-
-    -- | Fetch the daily leaderboard for a given day.  Does not require
-    -- a session key.
-    --
-    -- Leaderboard API calls tend to be expensive, so please be respectful
-    -- when using this.  If you automate this, please do not fetch any more
-    -- often than necessary.
-    --
-    -- /Cacheing rules/: Will be cached if a full leaderboard is observed.
-    --
-    -- @since 0.2.3.0
-    AoCDailyLeaderboard
-        :: Day
-        -> AoC DailyLeaderboard
-
-    -- | Fetch the global leaderboard.  Does not require
-    -- a session key.
-    --
-    -- Leaderboard API calls tend to be expensive, so please be respectful
-    -- when using this.  If you automate this, please do not fetch any more
-    -- often than necessary.
-    --
-    -- /Cacheing rules/: Will not cache if an event is ongoing, but will be
-    -- cached if received after the event is over.
-    --
-    -- @since 0.2.3.0
-    AoCGlobalLeaderboard
-        :: AoC GlobalLeaderboard
-
-    -- | From the calendar, fetch the next release's day and the
-    -- number of seconds util its release, if there is any at all.
-    --
-    -- This does an actual request to the AoC servers, and is only accurate
-    -- to the second; to infer this information (to the millisecond level)
-    -- from the system clock, you should probably use 'timeToRelease' and
-    -- 'aocServerTime' instead, which requires no network requests.
-    --
-    -- @since 0.2.8.0
-    AoCNextDayTime
-        :: AoC NextDayTime
-
-    -- | Fetch the per-day completion stats for the current year.  Does not
-    -- require a session key.
-    --
-    -- /Cacheing rules/: Not cached.
-    --
-    -- @since 0.2.11.0
-    AoCStats
-        :: AoC Stats
+  -- | Fetch prompts for a given day.  Returns a 'Map' of 'Part's and
+  -- their associated promps, as HTML.
+  --
+  -- _Cacheing rules_: Is cached on a per-day basis.  An empty session
+  -- key is given, it will be happy with only having Part 1 cached.  If
+  -- a non-empty session key is given, it will trigger a cache
+  -- invalidation on every request until both Part 1 and Part 2 are
+  -- received.
+  AoCPrompt ::
+    Day ->
+    AoC (Map Part Text)
+  -- | Fetch input, as plaintext.  Returned verbatim.  Be aware that
+  -- input might contain trailing newlines.
+  --
+  -- /Cacheing rules/: Is cached forever, per day per session key.
+  AoCInput :: Day -> AoC Text
+  -- | Submit a plaintext answer (the 'String') to a given day and part.
+  -- Receive a server reponse (as HTML) and a response code 'SubmitRes'.
+  --
+  -- __WARNING__: Answers are not length-limited.  Answers are stripped
+  -- of leading and trailing whitespace and run through 'URI.encode'
+  -- before submitting.
+  --
+  -- /Cacheing rules/: Is never cached.
+  AoCSubmit ::
+    Day ->
+    Part ->
+    String ->
+    AoC (Text, SubmitRes)
+  -- | Fetch the leaderboard for a given leaderboard public code (owner
+  -- member ID).  Requires session key.
+  --
+  -- The public code can be found in the URL of the leaderboard:
+  --
+  -- > https://adventofcode.com/2019/leaderboard/private/view/12345
+  --
+  -- (the @12345@ above)
+  --
+  -- __NOTE__: This is the most expensive and taxing possible API call,
+  -- and makes up the majority of bandwidth to the Advent of Code
+  -- servers.  As a courtesy to all who are participating in Advent of
+  -- Code, please use this super respectfully, especially in December: if
+  -- you set up automation for this, please do not use it more than once
+  -- per day.
+  --
+  -- /Cacheing rules/: Is never cached, so please use responsibly (see
+  -- note above).
+  --
+  -- @since 0.2.0.0
+  AoCLeaderboard ::
+    Integer ->
+    AoC Leaderboard
+  -- | Fetch the daily leaderboard for a given day.  Does not require
+  -- a session key.
+  --
+  -- Leaderboard API calls tend to be expensive, so please be respectful
+  -- when using this.  If you automate this, please do not fetch any more
+  -- often than necessary.
+  --
+  -- /Cacheing rules/: Will be cached if a full leaderboard is observed.
+  --
+  -- @since 0.2.3.0
+  AoCDailyLeaderboard ::
+    Day ->
+    AoC DailyLeaderboard
+  -- | Fetch the global leaderboard.  Does not require
+  -- a session key.
+  --
+  -- Leaderboard API calls tend to be expensive, so please be respectful
+  -- when using this.  If you automate this, please do not fetch any more
+  -- often than necessary.
+  --
+  -- /Cacheing rules/: Will not cache if an event is ongoing, but will be
+  -- cached if received after the event is over.
+  --
+  -- @since 0.2.3.0
+  AoCGlobalLeaderboard ::
+    AoC GlobalLeaderboard
+  -- | From the calendar, fetch the next release's day and the
+  -- number of seconds util its release, if there is any at all.
+  --
+  -- This does an actual request to the AoC servers, and is only accurate
+  -- to the second; to infer this information (to the millisecond level)
+  -- from the system clock, you should probably use 'timeToRelease' and
+  -- 'aocServerTime' instead, which requires no network requests.
+  --
+  -- @since 0.2.8.0
+  AoCNextDayTime ::
+    AoC NextDayTime
+  -- | Fetch the per-day completion stats for the current year.  Does not
+  -- require a session key.
+  --
+  -- /Cacheing rules/: Not cached.
+  --
+  -- @since 0.2.11.0
+  AoCStats ::
+    AoC Stats
 
 deriving instance Show (AoC a)
 deriving instance Typeable (AoC a)
 
 -- | Get the day associated with a given API command, if there is one.
 aocDay :: AoC a -> Maybe Day
-aocDay (AoCPrompt d     ) = Just d
-aocDay (AoCInput  d     ) = Just d
-aocDay (AoCSubmit d _ _ ) = Just d
+aocDay (AoCPrompt d) = Just d
+aocDay (AoCInput d) = Just d
+aocDay (AoCSubmit d _ _) = Just d
 aocDay (AoCLeaderboard _) = Nothing
 aocDay (AoCDailyLeaderboard d) = Just d
 aocDay AoCGlobalLeaderboard = Nothing
-aocDay AoCNextDayTime       = Nothing
-aocDay AoCStats             = Nothing
+aocDay AoCNextDayTime = Nothing
+aocDay AoCStats = Nothing
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
@@ -315,27 +321,27 @@ instance Exception AoCError
 -- Throttling is hard-limited to a minimum of 1 second between calls.
 -- Please be respectful and do not try to bypass this.
 data AoCOpts = AoCOpts
-    { -- | Session key
-      _aSessionKey :: String
-      -- | Year of challenge
-    , _aYear       :: Integer
-      -- | Structured user agent to use.  See
-      -- <https://www.reddit.com/r/adventofcode/comments/z9dhtd/please_include_your_contact_info_in_the_useragent/>
-    , _aUserAgent  :: AoCUserAgent
-      -- | Cache directory.  If 'Nothing' is given, one will be allocated
-      -- using 'getTemporaryDirectory'.
-    , _aCache      :: Maybe FilePath
-      -- | Fetch results even if cached.  Still subject to throttling.
-      -- Default is False.
-    , _aForce      :: Bool
-      -- | Throttle delay, in milliseconds.  Minimum is 1000000.  Default
-      -- is 3000000 (3 seconds).
-    , _aThrottle   :: Int
-      -- | Attempt to infer submission rank by fetching stats after a
-      -- correct submission that doesn't include rank information.
-      -- Default is False.
-    , _aInferRankOnSubmission :: Bool
-    }
+  { _aSessionKey :: String
+  -- ^ Session key
+  , _aYear :: Integer
+  -- ^ Year of challenge
+  , _aUserAgent :: AoCUserAgent
+  -- ^ Structured user agent to use.  See
+  -- <https://www.reddit.com/r/adventofcode/comments/z9dhtd/please_include_your_contact_info_in_the_useragent/>
+  , _aCache :: Maybe FilePath
+  -- ^ Cache directory.  If 'Nothing' is given, one will be allocated
+  -- using 'getTemporaryDirectory'.
+  , _aForce :: Bool
+  -- ^ Fetch results even if cached.  Still subject to throttling.
+  -- Default is False.
+  , _aThrottle :: Int
+  -- ^ Throttle delay, in milliseconds.  Minimum is 1000000.  Default
+  -- is 3000000 (3 seconds).
+  , _aInferRankOnSubmission :: Bool
+  -- ^ Attempt to infer submission rank by fetching stats after a
+  -- correct submission that doesn't include rank information.
+  -- Default is False.
+  }
   deriving (Show, Typeable, Generic)
 
 -- | Sensible defaults for 'AoCOpts' for a given user agent, year and session
@@ -343,18 +349,19 @@ data AoCOpts = AoCOpts
 --
 -- Use system temporary directory as cache, and throttle requests to one
 -- request per three seconds.
-defaultAoCOpts
-    :: AoCUserAgent
-    -> Integer
-    -> String
-    -> AoCOpts
-defaultAoCOpts aua y s = AoCOpts
+defaultAoCOpts ::
+  AoCUserAgent ->
+  Integer ->
+  String ->
+  AoCOpts
+defaultAoCOpts aua y s =
+  AoCOpts
     { _aSessionKey = s
-    , _aYear       = y
-    , _aUserAgent  = aua
-    , _aCache      = Nothing
-    , _aForce      = False
-    , _aThrottle   = 3000000
+    , _aYear = y
+    , _aUserAgent = aua
+    , _aCache = Nothing
+    , _aForce = False
+    , _aThrottle = 3000000
     , _aInferRankOnSubmission = False
     }
 
@@ -365,43 +372,50 @@ aocBase = BaseUrl Https "adventofcode.com" 443 ""
 -- | 'ClientM' request for a given 'AoC' API call.
 aocReq :: Maybe AoCUserAgent -> Maybe SessionKey -> Integer -> AoC a -> ClientM a
 aocReq aua sess yr = \case
-    AoCPrompt i       -> let r :<|> _ :<|> _ = adventAPIPuzzleClient aua yr i in r sess
-    AoCInput  i       -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r (reqSess sess)
-    AoCSubmit i p ans -> let _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
-                         in  r (reqSess sess) (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
-    AoCLeaderboard c  -> let _ :<|> _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
-                         in  r (reqSess sess) (PublicCode c)
-    AoCDailyLeaderboard d -> let _ :<|> _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
-                             in  r d
-    AoCGlobalLeaderboard  -> let _ :<|> _ :<|> _ :<|> r :<|> _ :<|> _ = adventAPIClient aua yr
-                             in  r
-    AoCNextDayTime        -> let r :<|> _ :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
-                             in  r
-    AoCStats              -> let _ :<|> r :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
-                             in  r
+  AoCPrompt i -> let r :<|> _ :<|> _ = adventAPIPuzzleClient aua yr i in r sess
+  AoCInput i -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r (reqSess sess)
+  AoCSubmit i p ans ->
+    let _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
+     in r (reqSess sess) (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
+  AoCLeaderboard c ->
+    let _ :<|> _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
+     in r (reqSess sess) (PublicCode c)
+  AoCDailyLeaderboard d ->
+    let _ :<|> _ :<|> _ :<|> _ :<|> r :<|> _ = adventAPIClient aua yr
+     in r d
+  AoCGlobalLeaderboard ->
+    let _ :<|> _ :<|> _ :<|> r :<|> _ :<|> _ = adventAPIClient aua yr
+     in r
+  AoCNextDayTime ->
+    let r :<|> _ :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
+     in r
+  AoCStats ->
+    let _ :<|> r :<|> _ :<|> _ :<|> _ :<|> _ = adventAPIClient aua yr
+     in r
   where
     reqSess = fromMaybe dummyToken
 
-
 -- | Cache file for a given 'AoC' command
-apiCache
-    :: Maybe String           -- ^ session key
-    -> Integer                -- ^ year
-    -> AoC a
-    -> Maybe FilePath
+apiCache ::
+  -- | session key
+  Maybe String ->
+  -- | year
+  Integer ->
+  AoC a ->
+  Maybe FilePath
 apiCache sess yr = \case
-    AoCPrompt d      -> Just $ printf "prompt/%04d/%02d.html"        yr (dayInt d)
-    AoCInput  d      -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
-    AoCSubmit{}      -> Nothing
-    AoCLeaderboard{} -> Nothing
-    AoCDailyLeaderboard d  -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
-    AoCGlobalLeaderboard{} -> Just $ printf "global/%04d.json" yr
-    AoCNextDayTime         -> Nothing
-    AoCStats               -> Nothing
+  AoCPrompt d -> Just $ printf "prompt/%04d/%02d.html" yr (dayInt d)
+  AoCInput d -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
+  AoCSubmit{} -> Nothing
+  AoCLeaderboard{} -> Nothing
+  AoCDailyLeaderboard d -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
+  AoCGlobalLeaderboard{} -> Just $ printf "global/%04d.json" yr
+  AoCNextDayTime -> Nothing
+  AoCStats -> Nothing
   where
     keyDir = case sess of
       Nothing -> ""
-      Just s  -> strip s ++ "/"
+      Just s -> strip s ++ "/"
 
 -- | Run an 'AoC' command with a given 'AoCOpts' to produce the result
 -- or a list of (lines of) errors.
@@ -411,43 +425,49 @@ apiCache sess yr = \case
 -- before submitting.
 runAoC :: AoCOpts -> AoC a -> IO (Either AoCError a)
 runAoC opts@AoCOpts{..} a = do
-    (keyMayb, cacheDir) <- case _aCache of
-      Just c  -> pure (Nothing, c)
-      Nothing -> (Just _aSessionKey,) . (</> "advent-of-code-api") <$> getTemporaryDirectory
+  (keyMayb, cacheDir) <- case _aCache of
+    Just c -> pure (Nothing, c)
+    Nothing -> (Just _aSessionKey,) . (</> "advent-of-code-api") <$> getTemporaryDirectory
 
-    (yy,mm,dd) <- toGregorian
-                . localDay
-                . utcToLocalTime (read "EST")
-              <$> getCurrentTime
-    let eventOver = yy > _aYear
-                 || (mm == 12 && dd > 25)
-        cacher = case apiCache keyMayb _aYear a of
-          Nothing -> id
-          Just fp -> cacheing (cacheDir </> fp) $
-                       if _aForce
-                         then noCache
-                         else saverLoader
-                                (not (null _aSessionKey))
-                                (not eventOver)
-                                a
+  (yy, mm, dd) <-
+    toGregorian
+      . localDay
+      . utcToLocalTime (read "EST")
+      <$> getCurrentTime
+  let eventOver =
+        yy > _aYear
+          || (mm == 12 && dd > 25)
+      cacher = case apiCache keyMayb _aYear a of
+        Nothing -> id
+        Just fp ->
+          cacheing (cacheDir </> fp) $
+            if _aForce
+              then noCache
+              else
+                saverLoader
+                  (not (null _aSessionKey))
+                  (not eventOver)
+                  a
 
-    cacher . runExceptT $ do
-      forM_ (aocDay a) $ \d -> do
-        rel <- liftIO $ timeToRelease _aYear d
-        when (rel > 0) $
-          throwError $ AoCReleaseError rel
+  cacher . runExceptT $ do
+    forM_ (aocDay a) $ \d -> do
+      rel <- liftIO $ timeToRelease _aYear d
+      when (rel > 0) $
+        throwError $
+          AoCReleaseError rel
 
-      let sess = SessionKey (T.pack _aSessionKey)
-      mtr <- liftIO
-           . throttling aocThrottler (max 1000000 _aThrottle)
-           $ runClientM (aocReq (Just _aUserAgent) (Just sess) _aYear a) =<< aocClientEnv
-      mcr <- maybe (throwError AoCThrottleError) pure mtr
-      res <- either (throwError . AoCClientError) pure mcr
-      case (a, _aInferRankOnSubmission, res) of
-        (AoCSubmit d p _, True, (txt, sr)) -> do
-          sr' <- liftIO $ inferSubmitRes_ opts d p sr
-          pure (txt, sr')
-        _ -> pure res
+    let sess = SessionKey (T.pack _aSessionKey)
+    mtr <-
+      liftIO
+        . throttling aocThrottler (max 1000000 _aThrottle)
+        $ runClientM (aocReq (Just _aUserAgent) (Just sess) _aYear a) =<< aocClientEnv
+    mcr <- maybe (throwError AoCThrottleError) pure mtr
+    res <- either (throwError . AoCClientError) pure mcr
+    case (a, _aInferRankOnSubmission, res) of
+      (AoCSubmit d p _, True, (txt, sr)) -> do
+        sr' <- liftIO $ inferSubmitRes_ opts d p sr
+        pure (txt, sr')
+      _ -> pure res
 
 -- | A version of 'runAoC' that throws an IO exception (of type 'AoCError')
 -- upon failure, instead of an 'Either'.
@@ -461,7 +481,7 @@ runAoC_ o = either throwIO pure <=< runAoC o
 -- @since 0.2.11.0
 statsForDayPart :: Day -> Part -> Stats -> Integer
 statsForDayPart d Part1 = maybe 0 dsSilver . M.lookup d
-statsForDayPart d Part2 = maybe 0 dsGold   . M.lookup d
+statsForDayPart d Part2 = maybe 0 dsGold . M.lookup d
 
 -- | If an Advent of Code submission returns 'SubCorrect' without an attached
 -- rank, attempt to infer the rank from 'AoCStats', assuming that it was just
@@ -471,101 +491,116 @@ statsForDayPart d Part2 = maybe 0 dsGold   . M.lookup d
 -- unchanged.
 --
 -- @since 0.2.11.0
-inferSubmitRes
-    :: AoCOpts
-    -> Day
-    -> Part
-    -> SubmitRes
-    -> IO (Either AoCError SubmitRes)
+inferSubmitRes ::
+  AoCOpts ->
+  Day ->
+  Part ->
+  SubmitRes ->
+  IO (Either AoCError SubmitRes)
 inferSubmitRes opts d p sr = case sr of
-    SubCorrect Nothing -> do
-        stats <- runAoC opts AoCStats
-        pure $ stats >>= \st ->
-          case M.lookup d st of
-            Just _  -> Right . SubCorrect . Just $ statsForDayPart d p st
-            Nothing -> Right $ SubCorrect Nothing
-    _ -> pure $ Right sr
+  SubCorrect Nothing -> do
+    stats <- runAoC opts AoCStats
+    pure $
+      stats >>= \st ->
+        case M.lookup d st of
+          Just _ -> Right . SubCorrect . Just $ statsForDayPart d p st
+          Nothing -> Right $ SubCorrect Nothing
+  _ -> pure $ Right sr
 
 -- | Variant of 'inferSubmitRes' that returns the original response if stats
 -- lookup fails.
 --
 -- @since 0.2.11.0
-inferSubmitRes_
-    :: AoCOpts
-    -> Day
-    -> Part
-    -> SubmitRes
-    -> IO SubmitRes
+inferSubmitRes_ ::
+  AoCOpts ->
+  Day ->
+  Part ->
+  SubmitRes ->
+  IO SubmitRes
 inferSubmitRes_ opts d p sr = either (const sr) id <$> inferSubmitRes opts d p sr
 
 aocClientEnv :: IO ClientEnv
 aocClientEnv = (`mkClientEnv` aocBase) <$> newTlsManager
 
-saverLoader
-    :: Bool             -- ^ is there a non-empty session token?
-    -> Bool             -- ^ is the event ongoing (True) or over (False)?
-    -> AoC a
-    -> SaverLoader (Either AoCError a)
+saverLoader ::
+  -- | is there a non-empty session token?
+  Bool ->
+  -- | is the event ongoing (True) or over (False)?
+  Bool ->
+  AoC a ->
+  SaverLoader (Either AoCError a)
 saverLoader validToken evt = \case
-    AoCPrompt{} -> SL { _slSave = either (const Nothing) (Just . encodeMap)
-                      , _slLoad = \str ->
-                          let mp     = decodeMap str
-                              hasAll = S.null (expectedParts `S.difference` M.keysSet mp)
-                          in  Right mp <$ guard hasAll
-                      }
-    AoCInput{}  -> SL { _slSave = either (const Nothing) Just
-                      , _slLoad = Just . Right
-                      }
-    AoCSubmit{} -> noCache
-    AoCLeaderboard{} -> noCache
-    AoCDailyLeaderboard{} -> SL
-        { _slSave = either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8 . A.encode)
-        , _slLoad = \str -> do
-            r <- A.decode . TL.encodeUtf8 . TL.fromStrict $ str
-            guard $ fullDailyBoard r
-            pure $ Right r
-        }
-    AoCGlobalLeaderboard{} -> SL
-        { _slSave = either
-                        (const Nothing)
-                        (Just . TL.toStrict . TL.decodeUtf8 . A.encode @(Bool, GlobalLeaderboard) . (evt,))
-        , _slLoad = \str -> do
-            (evt', lb) <- A.decode @(Bool, GlobalLeaderboard) . TL.encodeUtf8 . TL.fromStrict $ str
-            guard $ not evt'        -- only load cache if evt' is false: it was saved in a non-evt time
-            pure $ Right lb
-        }
-    AoCNextDayTime{} -> noCache
-    AoCStats{} -> noCache
+  AoCPrompt{} ->
+    SL
+      { _slSave = either (const Nothing) (Just . encodeMap)
+      , _slLoad = \str ->
+          let mp = decodeMap str
+              hasAll = S.null (expectedParts `S.difference` M.keysSet mp)
+           in Right mp <$ guard hasAll
+      }
+  AoCInput{} ->
+    SL
+      { _slSave = either (const Nothing) Just
+      , _slLoad = Just . Right
+      }
+  AoCSubmit{} -> noCache
+  AoCLeaderboard{} -> noCache
+  AoCDailyLeaderboard{} ->
+    SL
+      { _slSave = either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8 . A.encode)
+      , _slLoad = \str -> do
+          r <- A.decode . TL.encodeUtf8 . TL.fromStrict $ str
+          guard $ fullDailyBoard r
+          pure $ Right r
+      }
+  AoCGlobalLeaderboard{} ->
+    SL
+      { _slSave =
+          either
+            (const Nothing)
+            (Just . TL.toStrict . TL.decodeUtf8 . A.encode @(Bool, GlobalLeaderboard) . (evt,))
+      , _slLoad = \str -> do
+          (evt', lb) <- A.decode @(Bool, GlobalLeaderboard) . TL.encodeUtf8 . TL.fromStrict $ str
+          guard $ not evt' -- only load cache if evt' is false: it was saved in a non-evt time
+          pure $ Right lb
+      }
+  AoCNextDayTime{} -> noCache
+  AoCStats{} -> noCache
   where
     expectedParts :: Set Part
     expectedParts
       | validToken = S.fromDistinctAscList [Part1 ..]
-      | otherwise  = S.singleton Part1
+      | otherwise = S.singleton Part1
     sep = ">>>>>>>>>"
-    encodeMap mp = T.intercalate "\n" . concat $
-                            [ maybeToList $ M.lookup Part1 mp
-                            , [sep]
-                            , maybeToList $ M.lookup Part2 mp
-                            ]
+    encodeMap mp =
+      T.intercalate "\n" . concat $
+        [ maybeToList $ M.lookup Part1 mp
+        , [sep]
+        , maybeToList $ M.lookup Part2 mp
+        ]
     decodeMap xs = mkMap Part1 part1 <> mkMap Part2 part2
       where
         (part1, drop 1 -> part2) = span (/= sep) (T.lines xs)
-        mkMap p (T.intercalate "\n"->ln)
+        mkMap p (T.intercalate "\n" -> ln)
           | T.null (T.strip ln) = M.empty
-          | otherwise           = M.singleton p ln
+          | otherwise = M.singleton p ln
 
 -- | Get time until release of a given challenge.
-timeToRelease
-    :: Integer              -- ^ year
-    -> Day                  -- ^ day
-    -> IO NominalDiffTime
+timeToRelease ::
+  -- | year
+  Integer ->
+  -- | day
+  Day ->
+  IO NominalDiffTime
 timeToRelease y d = (zonedTimeToUTC (challengeReleaseTime y d) `diffUTCTime`) <$> getCurrentTime
 
 -- | Check if a challenge has been released yet.
-challengeReleased
-    :: Integer              -- ^ year
-    -> Day                  -- ^ day
-    -> IO Bool
+challengeReleased ::
+  -- | year
+  Integer ->
+  -- | day
+  Day ->
+  IO Bool
 challengeReleased y = fmap (<= 0) . timeToRelease y
 
 -- | Utility to get the current time on AoC servers.  Basically just gets the current
