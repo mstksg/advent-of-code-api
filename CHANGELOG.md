@@ -4,6 +4,10 @@ Changelog
 Version 0.2.12.0
 ----------------
 
+*September 28, 2026*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.12.0>
+
 *   Add `lbNumDays` and `lbDay1Ts` to `Leaderboard`, parsed from the `num_days`
     and `day1_ts` fields of the private leaderboard JSON.
 *   Add `lbmStarIndex` to `LeaderboardMember`, parsed from the `star_index`
