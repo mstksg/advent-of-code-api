@@ -203,7 +203,7 @@ data DailyLeaderboardMember = DLBM
     -- completion, and 'dlbmTime' to get the time it took to solve.
     --
     -- @since 0.2.7.0
-    , dlbmDecTime   :: NominalDiffTime      -- ^ time from midnight EST.
+    , dlbmDecTime   :: NominalDiffTime
     , dlbmUser      :: Either Integer Text
     , dlbmLink      :: Maybe Text
     , dlbmImage     :: Maybe Text

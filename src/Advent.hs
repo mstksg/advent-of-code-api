@@ -270,17 +270,14 @@ aocDay AoCStats             = Nothing
 
 -- | A possible (syncronous, logical, pure) error returnable from 'runAoC'.
 -- Does not cover any asynchronous or IO errors.
+#if MIN_VERSION_servant_client_core(0,16,0)
 data AoCError
     -- | An error in the http request itself
     --
     -- Note that if you are building this with servant-client-core <= 0.16,
     -- this will contain @ServantError@ instead of @ClientError@, which was
     -- the previous name of ths type.
-#if MIN_VERSION_servant_client_core(0,16,0)
     = AoCClientError ClientError
-#else
-    = AoCClientError ServantError
-#endif
     -- | Tried to interact with a challenge that has not yet been
     -- released.  Contains the amount of time until release.
     | AoCReleaseError NominalDiffTime
@@ -288,6 +285,22 @@ data AoCError
     -- it with 'setAoCThrottleLimit'.
     | AoCThrottleError
   deriving (Show, Typeable, Generic)
+#else
+data AoCError
+    -- | An error in the http request itself
+    --
+    -- Note that if you are building this with servant-client-core <= 0.16,
+    -- this will contain @ServantError@ instead of @ClientError@, which was
+    -- the previous name of ths type.
+    = AoCClientError ServantError
+    -- | Tried to interact with a challenge that has not yet been
+    -- released.  Contains the amount of time until release.
+    | AoCReleaseError NominalDiffTime
+    -- | The throttler limit is full.  Either make less requests, or adjust
+    -- it with 'setAoCThrottleLimit'.
+    | AoCThrottleError
+  deriving (Show, Typeable, Generic)
+#endif
 instance Exception AoCError
 
 -- | Setings for running an API request.
