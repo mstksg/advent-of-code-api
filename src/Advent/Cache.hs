@@ -55,6 +55,5 @@ cacheing fp SL{..} act = do
 
 readFileMaybe :: FilePath -> IO (Maybe Text)
 readFileMaybe =
-  (traverse (evaluate . force) . either (const Nothing) Just =<<)
-    . tryJust (guard . isDoesNotExistError)
-    . T.readFile
+  (traverse (evaluate . force) . either (const Nothing) Just)
+    <=< (tryJust (guard . isDoesNotExistError) . T.readFile)

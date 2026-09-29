@@ -31,5 +31,4 @@ main = do
       . mapM fileTest
       =<< listDirectory "test-data"
   c <- runTestTT tests
-  unless (failures c == 0) $
-    exitFailure
+  unless (failures c == 0) exitFailure

@@ -3,7 +3,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -106,6 +105,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.Aeson as A
+import Data.Either (fromRight)
 import Data.Kind
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -517,7 +517,7 @@ inferSubmitRes_ ::
   Part ->
   SubmitRes ->
   IO SubmitRes
-inferSubmitRes_ opts d p sr = either (const sr) id <$> inferSubmitRes opts d p sr
+inferSubmitRes_ opts d p sr = fromRight sr <$> inferSubmitRes opts d p sr
 
 aocClientEnv :: IO ClientEnv
 aocClientEnv = (`mkClientEnv` aocBase) <$> newTlsManager
