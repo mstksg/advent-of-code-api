@@ -47,6 +47,7 @@ module Advent.API (
   Divs,
   Scripts,
   RawText,
+  AcceptedAnswers (..),
 
   -- * Internal
   processHTML,
@@ -63,6 +64,7 @@ import Data.Finite
 import Data.Foldable
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
+import Data.List.Split (splitWhen)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
@@ -118,6 +120,11 @@ type Scripts = HTMLTags "script"
 -- | Interpret a response as a list of HTML 'T.Text' found in @<pre>@ tags.
 type Pres = HTMLTags "pre"
 
+-- | Interpret a response as a list of HTML 'T.Text' found in @<main>@ tags.
+--
+-- @since 0.2.13.0
+type Mains = HTMLTags "main"
+
 -- | Class for interpreting a list of 'T.Text' in tags to some desired
 -- output.
 --
@@ -150,6 +157,14 @@ instance (FromTags cls a, FromTags cls b) => FromTags cls (a :<|> b) where
 
 instance FromTags "article" SubmitRes where
   fromTags _ = Just . parseSubmitRes . fold . listToMaybe
+
+-- | Accepted answers for each part of a day.
+--
+-- @since 0.2.13.0
+newtype AcceptedAnswers = AcceptedAnswers {getAcceptedAnswers :: Map Part Text}
+
+instance FromTags "main" AcceptedAnswers where
+  fromTags _ = Just . AcceptedAnswers . parseAcceptedAnswers . fold . listToMaybe
 
 instance FromTags "div" DailyLeaderboard where
   fromTags _ = Just . assembleDLB . mapMaybe parseMember
@@ -290,6 +305,8 @@ type AdventAPI =
                       :> Header' '[Required, Strict] "Cookie" SessionKey
                       :> ReqBody '[FormUrlEncoded] SubmitInfo
                       :> Post '[Articles] (Text :<|> SubmitRes)
+                    :<|> Header' '[Required, Strict] "Cookie" SessionKey
+                      :> Get '[Mains] AcceptedAnswers
                 )
            :<|> ( "leaderboard"
                     :> ( Get '[Divs] GlobalLeaderboard
@@ -317,6 +334,7 @@ adventAPIClient ::
            (Maybe SessionKey -> ClientM (Map Part Text))
              :<|> (SessionKey -> ClientM Text)
              :<|> (SessionKey -> SubmitInfo -> ClientM (Text :<|> SubmitRes))
+             :<|> (SessionKey -> ClientM AcceptedAnswers)
          )
     :<|> ClientM GlobalLeaderboard
     :<|> (Day -> ClientM DailyLeaderboard)
@@ -332,6 +350,7 @@ adventAPIPuzzleClient ::
   (Maybe SessionKey -> ClientM (Map Part Text))
     :<|> (SessionKey -> ClientM Text)
     :<|> (SessionKey -> SubmitInfo -> ClientM (Text :<|> SubmitRes))
+    :<|> (SessionKey -> ClientM AcceptedAnswers)
 adventAPIPuzzleClient aua y = pis
   where
     _ :<|> _ :<|> pis :<|> _ = adventAPIClient aua y
@@ -387,6 +406,28 @@ eitherUser tr =
     ]
   where
     uni = H.universeTree tr
+
+parseAcceptedAnswers :: Text -> Map Part Text
+parseAcceptedAnswers =
+  M.mapMaybe id
+    . M.fromList
+    . zip [minBound ..]
+    . map findAnswer
+    . siblingsAfterArticles
+    . H.parseTree
+  where
+    siblingsAfterArticles :: [TagTree Text] -> [[TagTree Text]]
+    siblingsAfterArticles = drop 1 . splitWhen isArticle
+    isArticle (TagBranch "article" _ _) = True
+    isArticle _ = False
+    findAnswer :: [TagTree Text] -> Maybe Text
+    findAnswer siblings =
+      listToMaybe
+        [ innerText cs'
+        | TagBranch "p" _ cs <- siblings
+        , "your puzzle answer was" `T.isInfixOf` T.toLower (innerText cs)
+        , TagBranch "code" _ cs' <- cs
+        ]
 
 -- | Process an HTML webpage into a list of all contents in the given tag
 -- type

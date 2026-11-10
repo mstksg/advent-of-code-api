@@ -178,6 +178,15 @@ data AoC :: Type -> Type where
   --
   -- /Cacheing rules/: Is cached forever, per day per session key.
   AoCInput :: Day -> AoC Text
+  -- | Fetch the accepted answer (if any) for each part of a given day,
+  -- parsed from the day prompt page.
+  --
+  -- /Cacheing rules/: Same as 'AoCPrompt'.
+  --
+  -- @since 0.2.13.0
+  AoCAcceptedAnswer ::
+    Day ->
+    AoC (Map Part Text)
   -- | Submit a plaintext answer (the 'String') to a given day and part.
   -- Receive a server reponse (as HTML) and a response code 'SubmitRes'.
   --
@@ -267,6 +276,7 @@ deriving instance Typeable (AoC a)
 aocDay :: AoC a -> Maybe Day
 aocDay (AoCPrompt d) = Just d
 aocDay (AoCInput d) = Just d
+aocDay (AoCAcceptedAnswer d) = Just d
 aocDay (AoCSubmit d _ _) = Just d
 aocDay (AoCLeaderboard _) = Nothing
 aocDay (AoCDailyLeaderboard d) = Just d
@@ -374,8 +384,11 @@ aocReq :: Maybe AoCUserAgent -> Maybe SessionKey -> Integer -> AoC a -> ClientM 
 aocReq aua sess yr = \case
   AoCPrompt i -> let r :<|> _ :<|> _ = adventAPIPuzzleClient aua yr i in r sess
   AoCInput i -> let _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i in r (reqSess sess)
+  AoCAcceptedAnswer i ->
+    let _ :<|> _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
+     in getAcceptedAnswers <$> r (reqSess sess)
   AoCSubmit i p ans ->
-    let _ :<|> _ :<|> r = adventAPIPuzzleClient aua yr i
+    let _ :<|> _ :<|> r :<|> _ = adventAPIPuzzleClient aua yr i
      in r (reqSess sess) (SubmitInfo p ans) <&> \(x :<|> y) -> (x, y)
   AoCLeaderboard c ->
     let _ :<|> _ :<|> _ :<|> _ :<|> _ :<|> r = adventAPIClient aua yr
@@ -406,6 +419,7 @@ apiCache ::
 apiCache sess yr = \case
   AoCPrompt d -> Just $ printf "prompt/%04d/%02d.html" yr (dayInt d)
   AoCInput d -> Just $ printf "input/%s%04d/%02d.txt" keyDir yr (dayInt d)
+  AoCAcceptedAnswer d -> Just $ printf "accepted/%s%04d/%02d.txt" keyDir yr (dayInt d)
   AoCSubmit{} -> Nothing
   AoCLeaderboard{} -> Nothing
   AoCDailyLeaderboard d -> Just $ printf "daily/%04d/%02d.json" yr (dayInt d)
@@ -542,6 +556,14 @@ saverLoader validToken evt = \case
     SL
       { _slSave = either (const Nothing) Just
       , _slLoad = Just . Right
+      }
+  AoCAcceptedAnswer{} ->
+    SL
+      { _slSave = either (const Nothing) (Just . encodeMap)
+      , _slLoad = \str ->
+          let mp = decodeMap str
+              hasAll = S.null (expectedParts `S.difference` M.keysSet mp)
+           in Right mp <$ guard hasAll
       }
   AoCSubmit{} -> noCache
   AoCLeaderboard{} -> noCache

@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.13.0
+----------------
+
+*November 9, 2026*
+
+<https://github.com/mstksg/advent-of-code-api/releases/tag/v0.2.13.0>
+
+*   Add `AoCAcceptedAnswer`, to fetch the accepted answer (if any) for each
+    part of a day.
+
 Version 0.2.12.0
 ----------------
 
